@@ -2,6 +2,4 @@
 __WORK IN PROGRESS__
 
  * fingerprint, reliability analyses for individual differences
- * assessment of various pattern analysis methods, measures of similarity, denoising procedures
-
-
+ * assessment of various pattern analysis methods, measures of similarity, denoising procedures on reliability
