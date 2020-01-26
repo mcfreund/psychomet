@@ -26,20 +26,20 @@ are.equal.dimnames <- function(l) {
   all.equal(l2[[1]], l2[[2]])
 }
 
-whitening <- function(E, shrink = TRUE) {
+whitening <- function(E, shrinkage = "ledoitwolf") {
   
   S <- cov(E)  ## sample cov
   # corrplot::corrplot(cov2cor(S), method = "color")
   H <- diag(nrow(S))  ## target to shrink towards (Ledoit-Wolf's 'F')
   
-  if (shrink)  {
+  if (shrink %in% c("lw", "ledoitwolf", "LW"))  {
     k <- tawny::shrinkage.intensity(E, H, S)
     lambda <- max(c(0, min(k / nrow(E), 1)))  ## shrinkage factor
-  } else lambda <- 0
+  }
   
   S_hat <- lambda * H + (1 - lambda) * S  ## shrunken matrix
   
-  expm::sqrtm(solve(S_hat))  ## mahalanobis whitening matrix
+  solve(S_hat)  ## mahalanobis whitening matrix^2
   
 }
 
@@ -382,12 +382,3 @@ for (subj.i in seq_along(subjs)) {
 saveRDS(r, here("out", "runwise", "qc_group", "reliability_hilo_baseline_schaefer400.rds"))
 saveRDS(d, here("out", "runwise", "qc_group", "estimates-win-run_hilo_baseline_schaefer400.rds"))
 
-
-## render ----
-
-# rmarkdown::render(
-#   here("analyses", "runwise", "qc_subj", "qc_subj.rmd")
-#   )
-# # output_file
-# output_dir
-# output_format = "html_document"

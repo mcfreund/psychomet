@@ -105,17 +105,18 @@ sessi <- c("baseline", "proactive", "reactive")
 sessi.short <- c("Bas", "Pro", "Rea")
 # sessi <- sessi[1]
 # sessi.short <- sessi.short[1]
+n.knots <- 8
 
 ## create "label table" (lt) for loop indices
 
 lt <- rbind(
-  data.frame(
+  data.table(
     task     = "Axcpt", 
     variable = c("AY", "BX", "BY", "AX", "Bng", "Ang", "error", "button1", "button2"),
     glm.name = c(rep("Cues_EVENTS_censored", 7), rep("Buttons_censored", 2))
     # contrast = c("Acue_Bcue", "HI_LO_conf", "Nogo_Go", "error_correct", "B1_B2"),
   ),
-  data.frame(
+  data.table(
     task     = "Cuedts", 
     variable = c(
       "InConInc", "InconNoInc", "ConInc", "ConNoInc", "error",
@@ -129,20 +130,19 @@ lt <- rbind(
       )
     # contrast = c("Inc_NoInc", "InCon_Con", "Switch_Repeat", "error_correct", "B1_B2"),
   ),
-  data.frame(
+  data.table(
     task     = "Stern", 
     variable = c("LL5NP", "LL5NN", "LL5RN", "not5NP", "not5NN", "not5RN", "error", "button1", "button2"),
     glm.name = c(rep( "ListLength_EVENTS_censored", 7), rep("Buttons_censored", 2))
     # contrast = c("RN_NN_all", "RN_NN_LL5", "RN_NN_not5", "not5_LL5", "error_correct", "B1_B2"),
   ),
-  data.frame(
+  data.table(
     task     = "Stroop", 
     variable = c("PC50Con", "PC50InCon", "biasCon", "biasInCon", "error", "button1", "button2"),
     glm.name = c(rep( "ListLength_EVENTS_censored", 5), rep("Buttons_censored", 2))
     # contrast = c("InCon_Con_bias", "InCon_Con_PC50", "InCon_Con_PC50bias", "error_correct"),
   )
 )
-lt <- as.data.table(lt)
 
 contrast <- list(
   Axcpt  = c("Acue_Bcue", "HI_LO_conf", "Nogo_Go", "error_correct", "B1_B2"),
@@ -156,12 +156,12 @@ statistics.crun <- c(combo.paste(c("cor", "euc", "cvcor", "cveuc"), c("raw", "un
 
 ## lists of arrays
 
-d.wrun <- vector("list", length(tasks)) %>% setNames(tasks)
-d.crun <- r
+d.within <- vector("list", length(tasks)) %>% setNames(tasks)  ## d within
+d.across <- d.within  ## d between
 
 for (task.i in seq_along(tasks)) {
 
-  d.wrun[[task.i]] <- array(
+  d.within[[task.i]] <- array(
     NA,
     dim = c(
       subj  = length(subjs), 
@@ -169,6 +169,7 @@ for (task.i in seq_along(tasks)) {
       roi   = length(parcellation$key), 
       cont  = length(contrast[[task.i]]),
       stat  = length(statistics.wrun),
+      knot  = n.knots,
       run   = 2
     ),
     dimnames = list(
@@ -177,11 +178,12 @@ for (task.i in seq_along(tasks)) {
       roi   = parcellation$key, 
       cont  = contrast[[task.i]],
       stat  = statistics.wrun,
+      knot  = paste0("knot", seq_len(n.knots)),
       run   = c("run1", "run2")
     )
   )
   
-  d.crun[[task.i]] <- array(
+  d.across[[task.i]] <- array(
     NA,
     dim = c(
       subj  = length(subjs), 
@@ -189,6 +191,7 @@ for (task.i in seq_along(tasks)) {
       roi   = length(parcellation$key), 
       cont  = length(contrast[[task.i]]),
       stat  = length(statistics.crun),
+      knot  = n.knots,
       run   = 2
     ),
     dimnames = list(
@@ -197,13 +200,14 @@ for (task.i in seq_along(tasks)) {
       roi   = parcellation$key, 
       cont  = contrast[[task.i]],
       stat  = statistics.crun,
+      knot  = paste0("knot", seq_len(n.knots)),
       run   = c("run1", "run2")
     )
   )
   
 }
 
-r <- d.wrun  ## lis r for split-half (across runs) reliabilities
+r <- d.within  ## lis r for split-half (across runs) reliabilities
 
 
 ## loop ----
@@ -220,14 +224,19 @@ for (task.i in seq_along(tasks)) {
     name.sess.i <- sessi[sess.i]
     
     for (subj.i in seq_along(subjs)) {
+      ## subj.i = 1
+      
+      name.subj.i <- subjs[subj.i]
       
       lt.i <- lt[task == name.task.i, c("variable", "glm.name")]
       
       for (name.glm.i in unique(lt.i$glm.name)) {
         # name.glm.i = unique(lt.i$glm.name)[1]
-        
+      
+        vars.i <- lt.i[glm.name == name.glm.i]$variable
+          
         dirs <- combopaste(
-          file.path(dir.results, name.subj.i, name.task.j),
+          file.path(dir.results, name.subj.i, name.task.i),
           paste0("/", name.sess.i, "/", name.sess.i, "_", name.glm.i)
         )
 
@@ -249,14 +258,111 @@ for (task.i in seq_along(tasks)) {
             
             betas[[name.run.hemi.i]] <- collate_surface_params(
               f.betas, 
-              pattern = combopaste(lt.i$variable, c(".._Coef")) %>% paste0(collapse = "|")
+              pattern = combopaste(vars.i, c("#[0-9]_Coef")) %>% paste0(collapse = "|")
               )
+            
             resid[[name.run.hemi.i]] <- read_gifti2matrix(f.resid)
             
+          }  ## end hemi loop
+        }  ## end run loop
+        
+        betas <- abind(
+          run1 = cbind(betas[["run1_L"]], betas[["run1_R"]]),
+          run2 = cbind(betas[["run2_L"]], betas[["run2_L"]]),
+          rev.along = 0
+        )
+        resid <- abind(
+          run1 = cbind(resid[["run1_L"]], resid[["run1_R"]]),
+          run2 = cbind(resid[["run2_L"]], resid[["run2_L"]]),
+          rev.along = 0
+        )
+        
+        
+        ## estimation ----
+        
+        for (roi.i in seq_along(parcellation$key)) {
+          # roi.i = 1
+          name.roi.i <- parcellation$key[roi.i]
+          betas.i <- betas[, parcellation$atlas == roi.i, ]
+          
+          for (knot.i in seq_len(n.knots)) {
+            # knot.i = 1
+            
+            ## mask (for knot and region)
+            
+            rows.knot.i <- grep(paste0("#", knot.i - 1, "_Coef"), rownames(betas.i))  ## minus one b/c 0-based ind.
+            betas.ii <- betas.i[rows.knot.i, , ]
+            
+            for (contrast.i in contrast[[task.i]]) {
+              
+              ## group effects
+              
+              ## check order of rownames
+              
+              ## get contrasts
+              contrast
+              m <- rbind(
+                ##    ax  ay  ang  bx  by  bng  error
+                cbind(1/2, 1/2, 0, -1/2, -1/2, 0, 0),
+                cbind(-1/2, 1/2, 0, 1/2, -1/2, 0, 0),
+                cbind(-1/4, -1/4, 1/2, -1/4, -1/4, 1/2, 0),
+                cbind(-1/4, -1/4, 0, -1/4, -1/4, 0, 1/2)
+              )
+              dimnames(m) <- list(contrast = contrast[[task.i]][-5], param = c("AX", "AY", "Ang", "BX", "BY", "Bng", "error"))
+              
+              contrasts.i <- abind(
+                run1 = m %*% betas.ii[, , "run1"],
+                run2 = m %*% betas.ii[, , "run2"],
+                rev.along = 0
+              )
+              
+              
+              
+              ## within-run
+              
+              diag(cor(t(contrasts.i[, , 1]), t(contrasts.i[, , 2])))
+              dist(contrasts.i[, , 1], contrasts.i[, , 2])
+              
+              ## across-run
+              
+              cor(t(betas.ii[, , 1]), t(betas.ii[, , 2]))  ## cross-run (correlation, raw)
+              
+              cor(t(betas.ii[, , 1]), t(betas.ii[, , 2]))  ## cross-run (correlation, cross-validated)
+              
+              cor(t(betas.ii[, , 1]), t(betas.ii[, , 2]))  ## cross-run (euclidean, raw)
+              
+              
+              
+              betas.ii
+              
+              
+              
+              betas.i[]
+              
+              names(dimnames(d.within$Axcpt))
+              
+              
+              d.within[[name.task.i]][subj.i, sess.i, roi.i, , , knot.i, ]  ## subj, sess, roi, cont, stat, knot, run
+              
+              
+              
+              dimnames(d.within$Axcpt)
+              dimnames(d.across$Axcpt)
+              
+
+            }
+            
+            
+            
+            
           }
+          
+
+          
         }
         
-        ## TODO: combine into single arrays
+        
+        ## reliabilities
         
         ## TODO: get reliabilities and effect sizes
         ## TODO: store in d.wrun, d.crun, and r
