@@ -109,9 +109,7 @@ m <- list(
 
 # c("AX", "AY", "Ang", "BX", "BY", "Bng", "error")  ## in same order as in GLMs
 
-for (ii in seq_along(m)) {
-  dimnames(m[[ii]]) <- list(contrast = contrast[[task.i]], param = )
-}
+for (ii in seq_along(m)) dimnames(m[[ii]]) <- list(contrast = contrast[[task.i]], param = )
 
 
 statistics <- combo.paste(c("cor", "euc"), c("raw", "unn", "mnn"))
