@@ -107,8 +107,9 @@ control <- coef.activation %>%
 icc <- u.wide %>%
   group_by(roi) %>%
   summarize(
-    r = cor(run1, run2, method = "spearman")
-    # icc = list(psych::ICC(.[c("run1", "run2")])$results)
+    r.spearman = cor(run1, run2, method = "spearman"),
+    r.pearson = cor(run1, run2),
+    icc = list(psych::ICC(.[c("run1", "run2")])$results)
     )
 
 
