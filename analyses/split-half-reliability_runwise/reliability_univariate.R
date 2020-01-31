@@ -18,7 +18,7 @@ library(cowplot)
 theme_set(theme_classic(base_size = 8))
 
 # r <- readRDS(here("out", "runwise", "qc_group", "reliability_hilo_baseline_schaefer400.rds"))
-d <- readRDS(here("out", "runwise", "estimates-win-run_hilo_baseline_schaefer400.rds"))
+d <- readRDS(here("out", "runwise", "data", "estimates-win-run_hilo_baseline_schaefer400.rds"))
 
 nodename <- Sys.info()["nodename"]
 if (nodename == "ccplinux1") {
@@ -42,7 +42,7 @@ over <- list(
 )
 
 
-dimnames(r)
+# dimnames(r)
 dimnames(d)
 u <- d[, , , "mean", ]  ## u for univariate
 
@@ -76,26 +76,26 @@ coef.activation$task <- gsub("task", "", coef.activation$task)
 coef.activation %<>% cbind(reshape2::colsplit(.$roi, "_", c("hemi", "community", "parcel")))
 coef.activation %<>% rename(b = "Estimate", t = "t value", se = "Std. Error")
 
-coef.activation %>%
-  ggplot(aes(parcel, b)) +
-  facet_grid(vars(task), vars(community), scales = "free", space = "free") +
-  geom_hline(yintercept = 0) +
-  geom_point(aes(alpha = ifelse(abs(t) > 2, 1, 1/12))) +
-  geom_errorbar(
-    aes(
-      ymin = b - se * 1.96, ymax = b + se * 1.96,
-      alpha = ifelse(abs(t) > 2, 1, 1/12)
-    )
-  ) +
-  theme(
-    axis.text.x = element_text(angle = 90, hjust = 1, color = ifelse(abs(coef.activation[["t"]]) > 2, "black", "grey70")),
-    legend.position = "none"
-  )
+# coef.activation %>%
+#   ggplot(aes(parcel, b)) +
+#   facet_grid(vars(task), vars(community), scales = "free", space = "free") +
+#   geom_hline(yintercept = 0) +
+#   geom_point(aes(alpha = ifelse(abs(t) > 2, 1, 1/12))) +
+#   geom_errorbar(
+#     aes(
+#       ymin = b - se * 1.96, ymax = b + se * 1.96,
+#       alpha = ifelse(abs(t) > 2, 1, 1/12)
+#     )
+#   ) +
+#   theme(
+#     axis.text.x = element_text(angle = 90, hjust = 1, color = ifelse(abs(coef.activation[["t"]]) > 2, "black", "grey70")),
+#     legend.position = "none"
+#   )
 
 conjunction <- coef.activation %>%
   group_by(roi) %>%
   summarize(sig = sum(t > 2))
-conjunction %>% filter(sig == 2)  ## penumbra
+# conjunction %>% filter(sig == 2)  ## penumbra
 core <- conjunction %>% filter(sig == 3)  ## core
 # conjunction %>% filter(sig == 4)
 
@@ -115,6 +115,11 @@ icc <- u.wide %>%
 s <- full_join(coef.activation, icc)
 s$control <- s$roi %in% control$roi
 s$conjunc <- s$roi %in% core$roi
+
+write.csv(s, here("out", "runwise", "data", "univariate_reliabilities.csv"))
+
+
+## plot ----
 
 s %>%
   ggplot(aes(t, r)) +
