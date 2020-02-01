@@ -104,20 +104,27 @@ control <- coef.activation %>%
   summarize(ns = sum(t > 0 & t < 1)) %>%
   filter(ns > 2)
 
-icc <- u.wide %>%
+cors <- u.wide %>%
   group_by(roi) %>%
   summarize(
     r.spearman = cor(run1, run2, method = "spearman"),
-    r.pearson = cor(run1, run2),
-    icc = list(psych::ICC(.[c("run1", "run2")])$results)
-    )
+    r.pearson = cor(run1, run2)
+  )
 
+ul <- split(u.wide, interaction(u.wide$task, u.wide$roi))
 
-s <- full_join(coef.activation, icc)
-s$control <- s$roi %in% control$roi
-s$conjunc <- s$roi %in% core$roi
+icc <- lapply(ul, function(x) psych::ICC(x[c("run1", "run2")])$results)
+icc <- lapply(icc, function(x) x[x$type == "ICC3", ])
+icc <- do.call(rbind, icc)
+icc <- select(icc, p, lb = "lower bound", ub = "upper bound", icc = ICC)
+icc <- cbind(icc, reshape2::colsplit(rownames(icc), "\\.", c("task", "roi")))
 
-write.csv(s, here("out", "runwise", "data", "univariate_reliabilities.csv"))
+reliab <- full_join(coef.activation, cors)
+reliab <- full_join(reliab, icc)
+reliab$control <- reliab$roi %in% control$roi
+reliab$conjunc <- reliab$roi %in% core$roi
+
+write.csv(reliab, here("out", "runwise", "data", "univariate_reliabilities.csv"))
 
 
 ## plot ----
