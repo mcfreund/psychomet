@@ -13,8 +13,8 @@
 
 \section*{notation}
 
-For a given subject, task, and parcel, let $x_v$ be the vector of "raw data" (i.e., the contrast estimates obtained from the GLM: e.g., Hi\textunderscore Lo in Stroop).
-I'll call this vector the "activation pattern" (a pattern across vertices).
+For a given subject, task, and parcel, let $x_v$ be the vector of ``raw data" (i.e., the contrast estimates obtained from the GLM: e.g., Hi\textunderscore Lo in Stroop).
+I'll call this vector the ``activation pattern" (a pattern across vertices).
 The subscript $v$ indexes the vertex within the parcel, where $v \text{ in } 1, \dots, V$ vertices.
 I'll indicate which subject the data are from by the superscript $x_v^{(s)}$, for $s \text{ in } 1, \dots, S$ subjects.
 E.g., for subject $s = 1$, the activation pattern is indicated by $x_v^{(1)}$.
@@ -31,12 +31,17 @@ The distance between subject 1 and 2's activation patterns is given by
 But, we will want to use this formula instead:
 
 \begin{equation}
-	\textit{multivariate d}_{\text{scaled}}(1, 2) = \frac{\sqrt{\sum_{v = 1}^{V}(x_v^{(1)} - x_v^{(2)})^2}}{V}
+	\textit{multivariate d}_{\text{scaled}}(1, 2) = 
+	\sqrt{
+		\frac
+		{\sum_{v = 1}^{V}(x_v^{(1)} - x_v^{(2)})^2}
+		{V}
+	}
 \end{equation}
 
-This is because the magnitude of $d$ will scale with the number of dimensions $V$.
+This is because the magnitude of $d^2$ will scale with the number of dimensions $V$.
 Our main goal is to compare the sensitivity of $d$ when all dimensions are used, to when only one is used (the mean).
-Dividing the distances by $V$ puts these metrics on the same scale.
+Dividing the distances by $\sqrt{V}$ puts these metrics on the same scale.
 
 \section*{euclidean distance: univariate case}
 
@@ -56,7 +61,7 @@ and
 Then simply plugging these guys into Equation 2, we get
 
 \[
-\textit{univariate d}_{\text{scaled}}(1, 2) = \frac{\sqrt{\sum_{v = 1}^{V}(\bar{x}^{(1)} - \bar{x}^{(2)})^2}}{V}
+\textit{univariate d}_{\text{scaled}}(1, 2) = \sqrt{\frac{\sum_{v = 1}^{V}(\bar{x}^{(1)} - \bar{x}^{(2)})^2}{V}}
 \]
 
 But because ``$V$'', in this case, actually equals 1 (the mean is a scalar value), we can remove the denominator and summation operation
