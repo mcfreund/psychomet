@@ -1,26 +1,9 @@
+## system info
+
 nodename <- Sys.info()["nodename"]
-
-if (nodename == "ccplinux1") {
-  
-  dir.atlas <- "/data/nil-external/ccp/freund/atlases"
-  dir.schaefer <- "/data/nil-bluearc/ccp-hcp/DMCC_ALL_BACKUPS/ATLASES/"
-  
-} else if (nodename == "CCP-FREUND") {
-  ## mike freund's (i.e., ccp's) thinkpad
-  ## reliant on box drive
-  ## assumes box drive location at ./Users/mcf/Box
-  
-  dir.atlas <- "C:/local/atlases"
-  dir.schaefer <- dir.atlas
-  
-} else if (nodename == "PUTER") {
-
-  dir.atlas <- "C:/Users/mcf/Documents/atlases"
-  dir.schaefer <- file.path(dir.atlas, "ATLASES")
-  
-}
-
 n_cores <- parallel::detectCores()
+
+## image, design, analysis info
 
 n_vert <- 20484  ## surface hcp mesh
 n_trs <- c(
@@ -39,6 +22,11 @@ n_trs <- c(
 )
 
 tasks <- c("Axcpt", "Cuedts", "Stern", "Stroop")
+
+subjs_ub55 <- read.csv(here::here("..", "ub55", "in", "ub55_subjects.txt"))
+subjs_test <- c()
+subjs_retest <- c()
+
 
 
 dmcc34 <- c(
