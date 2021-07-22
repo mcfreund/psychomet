@@ -1,0 +1,267 @@
+---
+title: 'intersubject discrimination: univariate versus multivariate measures'
+author: "michael freund"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    highlight: zenburn
+    number_sections: true
+    theme: spacelab
+---
+
+
+# intro
+
+Purpose: 
+
+To compare univariate and multivariate (multivertex) measures in terms of how well they discriminate subjects.
+
+ 
+
+```{r setup, include = FALSE}
+
+source(here::here("code", "_packages.R"))
+source(here("code", "read-behav.R"))
+source(here("code", "_vars.R"))
+source(here("code", "_atlases.R"))
+source(here("code", "_settings.R"))
+source(here("code", "_funs.R"))
+
+## data ----
+
+d <- fread(here("out", "fprint", "unimulti_hilo_target_schaefer400-07", "idi_group.csv"))
+
+d <- d %>%
+  
+  group_by(transform, variable, task) %>%
+  mutate(
+    p.fdr = p.adjust(p, "fdr"),
+    network = get.network(parcel),
+    hemi = substr(parcel, 1, 1),
+    num.roi = match(parcel, parcellation$key)
+  ) %>%
+  
+  arrange(transform, variable, task, num.roi) %>%
+  
+  as.data.table
+
+
+```
+
+
+Description:
+
+
+* Beta contrast patterns ($\text{high} - \text{low}$) were estimated for each run
+* with these contrast patterns, two types of euclidean distances were estimated:
+  * across-run, within-subject distances
+  * across-run, betwen-subject distances
+* the mean within-subject distance was subtracted from the mean between-subject distance
+* this formed the "multivariate" intersubject discrimintion index (IDI)
+* the same procedure was conducted on beta contrast *means*, to form the "univariate" IDI
+* these IDIs were tested against zero, and were also directly contrasted between univariate and multivariate.
+
+Inferential statistics:
+
+* non-parametric bootstrap tests were conducted:
+  * subjects resampled, and IDIs recalculated to form bootstrapped distributions
+  * 95% intervals were calculated on bootstrapped distributions with BCa method
+  * frequentists p-values derived from percentile bootstrap
+  * all p-value corrections were performed whole-cortex, with FDR.
+
+Parcellation:
+
+  * Schaefer 400, 7 network
+
+GLMs:
+
+  * DMCC55B
+  * run-wise, 1trpk, shifted TENTs
+  * Cuedts: terms for $\text{trial-type (congr, incon)}\times\text{sequence (switch, repeat)}$ instead of $\text{incentive}$
+
+Target TRs:
+
+  * Axcpt: `r target.trs$Axcpt`
+  * Cuedts: `r target.trs$Cuedts`
+  * Stern: `r target.trs$Stern`
+  * Stroop: `r target.trs$Stroop`
+
+Contrasts:
+
+  * Axcpt: $\text{BY} - \text{BX}$
+  * Cuedts: $(\text{InConSwitch} + \text{InConRepeat} - \text{ConSwitch} - \text{ConRepeat})/2$
+  * Stern: $\text{LL5RN} - \text{LL5NN}$
+  * Stroop: $(\text{PC50InCon} + \text{biasInCon} - \text{PC50Con} - \text{biasCon})/2$
+
+Transforms:
+
+  * "scaled": beta coefficients were divided by their root mean sum of squares prior to IDI procedure.
+  * non-prewhitened patterns
+
+
+
+# stats
+
+```{r, fig.width = 12, fig.height = 8}
+
+d %>%
+  
+  filter(transform == "unscaled") %>%
+  select(task, transform, parcel, variable, estimate, p.fdr) %>%
+  dcast(task + transform + parcel ~ variable, value.var = c("estimate", "p.fdr")) %>%
+  
+  ggplot(aes(estimate_multivariate, estimate_univariate)) +
+  
+  geom_abline() +
+  geom_hline(yintercept = 0) +
+  geom_vline(xintercept = 0) +
+  geom_point() +
+  geom_point(size = 2, color = "white", shape = 21, aes(fill = p.fdr_multivariate < 0.05 | p.fdr_univariate < 0.05)) +
+  
+  scale_fill_manual(
+    values = c("TRUE" = "firebrick", "FALSE" = "black"), 
+    labels = c("TRUE" = "pFDR<0.05", "FALSE" = "pFDR>=0.05"),
+    name = NULL
+    ) +
+  theme(legend.position = "top") +
+  
+  facet_grid(cols = vars(task), scales = "free") +
+  # facet_grid(vars(transform), cols = vars(task), scales = "free") +
+  
+  labs(
+    title = "mean multivariate versus univariate IDIs per parcel", 
+    x = "multivariate IDI", 
+    y = "univariateariate IDI",
+    caption = "p-value from non-parametric bootstrap"
+    )
+
+
+```
+
+```{r fig.width = 8, fig.height = 11}
+
+d %>%
+  
+  filter(transform == "unscaled") %>%
+  
+  
+  dcast(task + transform + parcel ~ variable, value.var = c("estimate", "p.fdr")) %>%
+  filter(estimate_multivariate > 0, estimate_univariate > 0) %>%
+  
+  
+  ggplot(aes(estimate_multivariate, estimate_univariate, color = p.fdr_contrast < 0.05)) +
+  
+  geom_abline() +
+  geom_hline(yintercept = 0) +
+  geom_vline(xintercept = 0) +
+  geom_point() +
+  
+  facet_grid(cols = vars(task), rows = vars(get.network(parcel)), scales = "free") +
+  
+  scale_color_manual(
+    values = c("TRUE" = "firebrick", "FALSE" = "black"), 
+    labels = c("TRUE" = "pFDR<0.05", "FALSE" = "pFDR>=0.05"),
+    name = NULL
+    ) +
+  theme(legend.position = "top") +
+  
+  scale_x_continuous(n.breaks = 3) +
+  scale_y_continuous(n.breaks = 3) +
+  
+  labs(
+    title = "mean univariate versus multivariate contrasts per parcel: unscaled", 
+    x = "multivariate contrast (b/n - w/i)", 
+    y = "univariate contrast (b/n - w/i)",
+    caption = "p-value from non-parametric bootstrap\nplots exclude contrasts<0"
+    )
+
+
+
+
+d %>%
+  
+  filter(transform == "scaled") %>%
+  
+  
+  dcast(task + transform + parcel ~ variable, value.var = c("estimate", "p.fdr")) %>%
+  filter(estimate_multivariate > 0, estimate_univariate > 0) %>%
+  
+  
+  ggplot(aes(estimate_multivariate, estimate_univariate, color = p.fdr_contrast < 0.05)) +
+  
+  geom_abline() +
+  geom_hline(yintercept = 0) +
+  geom_vline(xintercept = 0) +
+  geom_point() +
+  
+  facet_grid(cols = vars(task), rows = vars(get.network(parcel)), scales = "free") +
+  
+  scale_color_manual(
+    values = c("TRUE" = "firebrick", "FALSE" = "black"), 
+    labels = c("TRUE" = "pFDR<0.05", "FALSE" = "pFDR>=0.05"),
+    name = NULL
+    ) +
+  theme(legend.position = "top") +
+  
+  scale_x_continuous(n.breaks = 3) +
+  scale_y_continuous(n.breaks = 3) +
+  
+  labs(
+    title = "mean univariate versus multivariate contrasts per parcel: scaled", 
+    x = "multivariate contrast (b/n - w/i)", 
+    y = "univariate contrast (b/n - w/i)",
+    caption = "p-value from non-parametric bootstrap\nplots exclude contrasts<0"
+    )
+
+
+```
+
+
+
+# maps
+
+NB: dark colors are large effects and yellow/light colors are small effectss.
+
+```{r brains, fig.width = 15, results = "asis"}
+
+
+for (task.i in tasks) {
+  
+  cat(sprintf("\n## %s", task.i))
+  cat("\n")
+  
+  for (variable.i in c("univariate", "multivariate", "contrast")) {
+
+    cat(sprintf("\n### %s", variable.i))
+    cat("\n")
+    
+    for (transform.i in c("unscaled", "scaled")) {
+      
+      cat(sprintf("\n#### %s ", transform.i))
+      # cat("\n")
+      
+      d %>%
+        
+        filter(task == task.i, transform == transform.i, variable == variable.i) %>%
+    
+        build_overlay("estimate", template = schaefer) %>%
+        plot_surface(underlay = hcp, hues = rev(viridis::inferno(500)))
+      
+      d %>%
+        
+        filter(task == task.i, transform == transform.i, variable == variable.i) %>%
+        mutate(estimate = ifelse(p.fdr < 0.05, estimate, 0)) %>%
+
+        build_overlay("estimate", template = schaefer) %>%
+        plot_surface(underlay = hcp, hues = rev(viridis::inferno(500)))
+      
+    }
+    
+  }
+    
+}
+
+
+```
+

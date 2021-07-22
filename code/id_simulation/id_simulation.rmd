@@ -1,0 +1,412 @@
+---
+title: "intersubject discrimination (ID): mathematical definitions and simulation"
+output:
+  html_document:
+    toc: true
+    toc_depth: 3
+    number_sections: true
+
+---
+
+# definitions
+
+## mutivariate and univariate distance measures
+
+Let $x_{sv}$ be the b-coefficient estimate for subject $s \in 1, \ldots, S$ and for vertex $v \in 1, \ldots, V$ vertices, from fold 1 of the experiment.
+Fold 1 could be, e.g., run 1, or could be the "test" phase.
+Let $y_{tv}$ be an analogous estimate from fold 2 of the experiment (e.g., run 2 or "retest" phase), for a not-necessarily-different subject $t \in 1, \ldots, S$.
+These estimates are elements of matrices $\mathbf{X}$ and $\mathbf{Y}$, both of size $S\times V$.
+
+**Multivariate distance measure**: the squared Euclidean distance between vectors $x_s$ and $y_t$.
+
+\[\mathit{m}_{st} = \frac{1}{V}\sum_{v=1}^{V} (x_{sv} - y_{tv})^2\]
+
+We scale by the number of vertices $V$ to aid comparability across regions of interest.
+
+**Univariate distance measure**: the squared Euclidean distance between *the sum of the elements of* vectors $x_s$ and of $y_t$.
+
+\[\bar x_{s} = \sum_{v=1}^{V}x_{sv}\]
+\[\bar y_{t} = \sum_{v=1}^{V}y_{tv}\]
+\[\mathit{u}_{st} = \frac{1}{V}(\bar x_{s} - \bar y_{t})^2\]
+
+Because the sum of the elements of a vector is a scalar, here, the squared Euclidean distance simplifies to the squared difference between the terms.
+
+
+## intersubject discrimination index (IDI)
+
+The cross-fold multivariate distances, $\mathit{m}_{st}$, can be collated into the $S\times S$ matrix $\mathbf{M}$.
+Analogously, the univariate distances, $\mathit{u}_{st}$, can be collated into an $S\times S$ matrix $\mathbf{U}$.
+These matrices are cross-fold distance matrices: asymmetric, with rows corresponding to fold 1, and columns corresponding to fold 2. 
+Their diagonal elements contain within-subject distances, while the off-diagonal elements contain cross-subject distances.
+
+
+The IDI is computed via a contrast on these cross-fold distance matrices.
+The IDI is defined as the mean of the cross-subject distances (off-diagonal elements) minus the mean of the within-subject distances (diagonal elements).
+Formally, for an arbitrary $S\times S$ cross-fold distance matrix $\mathbf{D}$,
+
+
+\[\mathit{idi}(\mathbf{D}_{S\times S}) = 
+\frac{\sum_{s=1,t>s}^{S}d_{st} + \sum_{s>t,t=1}^{S}d_{st}}{S^2-S} - \frac{tr(\mathbf{D})}{S}\]
+
+
+The multivariate and univariate IDI statistics can now be defined as
+
+\[\mathit{mIDI} = \mathit{idi}(\mathbf{M})\]
+
+and
+
+\[\mathit{uIDI} = \mathit{idi}(\mathbf{U})\]
+
+
+# simulations
+
+
+```{r setup}
+knitr::opts_chunk$set(cache = TRUE)
+
+library(knitr)
+library(MASS)
+library(RColorBrewer)
+
+euclidean2 <- function(x, y) sum((x - y)^2)  ## squared euclidean distance; works on vectors
+
+
+pdist2 <- function(A,B) {
+  
+  ## this function works on matrices A and B.
+  ## A and B should be matrices with subjects as rows and vertices as columns.
+  ## A and B should be from separate folds (i.e., "test" and "retest" or "run1" and "run2").
+  
+  ## this function computes the squared euclidean distances between each row of A and each row of B.
+  ## the output is therefore a matrix of size nrow(A)*nrow(B), i.e., Sects * Sects.
+  
+  ## this is an efficient implementation of the pdist::pdist function.
+  ## see links for more information:
+  ## https://www.r-bloggers.com/2013/05/pairwise-distances-in-r/
+  ## https://blog.smola.org/post/969195661/in-praise-of-the-second-binomial-formula
+  
+  
+  an = apply(A, 1, function(rvec) crossprod(rvec,rvec))
+  bn = apply(B, 1, function(rvec) crossprod(rvec,rvec))
+  
+  m = nrow(A)
+  n = nrow(B)
+  
+  tmp = matrix(rep(an, n), nrow=m) 
+  tmp = tmp +  matrix(rep(bn, m), nrow=m, byrow=TRUE)
+  
+  tmp - 2 * tcrossprod(A,B)  ## squared euclidean distance
+  
+}
+
+
+idi <- function(x) {
+  
+  ## this function works on square distance matrices, and computes the "intersubject discrimination index".
+  ## it subtracts the mean diagonal from the mean of the off diagonals.
+  
+  offdiag <- x[row(x) != col(x)]
+  diagonal <- diag(x)
+  
+  mean(offdiag) - mean(diagonal)
+  
+}
+
+
+n_sim <- 1E4  ## number replicates
+V <- 100  ## number voxels
+S <- 55  ## number subjects
+
+
+rf <- colorRampPalette(rev(brewer.pal(11, 'Spectral')))  ## for palette
+r <- rf(32)
+
+```
+
+
+
+## multivariate and univariate distance measures
+
+### no effect
+
+```{r simulate}
+
+d <- as.data.frame(matrix(NA, ncol = 2, nrow = n_sim))
+names(d) <- c("m", "u")
+
+for (ii in 1:n_sim) {
+
+  x <- rnorm(V)
+  y <- rnorm(V)
+  
+  d$m[ii] <- euclidean2(x, y) / V  ## multivariate distance
+  d$u[ii] <- euclidean2(sum(x), sum(y)) / V  ## univariate distance
+  
+}
+
+```
+
+
+Expected values seem to be equivalent.
+However, variance (and PDF) differs depending on V.
+
+```{r}
+
+colMeans(d)
+apply(d, 2, var)
+t.test(d$m, d$u, paired = TRUE)$statistic
+
+hist(d$m)
+hist(d$u)
+
+
+kernel_d2 <- kde2d(d$m, d$u)
+image(kernel_d2, col = r, main = "euclidean^2", xlab = "multivariate", ylab = "univariate")
+
+```
+
+
+Taking square root breaks equivalence of expected values.
+
+```{r}
+
+colMeans(sqrt(d))
+t.test(sqrt(d$m), sqrt(d$u), paired = TRUE)$statistic
+
+hist(sqrt(d$m))
+hist(sqrt(d$u))
+apply(sqrt(d), 2, var)
+
+kernel_d <- kde2d(sqrt(d$m), sqrt(d$u))
+image(kernel_d, col = r, main = "euclidean", xlab = "multivariate", ylab = "univariate")
+
+```
+
+
+These simulated distributions are well-matched by the Chi-square distributions, with *df* of either 1 (for univariate measure) or V (for multivariate measure).
+
+```{r}
+
+qqplot(
+  qchisq(ppoints(n_sim), df = 1), 
+  d$u, 
+  main = expression("Q-Q plot for" ~~ {chi^2}[k == 1]),
+  xlab = "theoretical",
+  ylab = "univariate distances"
+  )
+
+qqplot(
+  qchisq(ppoints(n_sim), df = V), 
+  d$m, 
+  main = expression("Q-Q plot for" ~~ {chi^2}[k == V]),
+  xlab = "theoretical",
+  ylab = "multivariate distances"
+  )
+
+
+```
+
+
+### univariate (uniform) effect
+
+```{r}
+
+d_univ <- as.data.frame(matrix(NA, ncol = 2, nrow = n_sim))
+names(d_univ) <- c("m", "u")
+
+for (ii in 1:n_sim) {
+
+  x <- rnorm(V)
+  y <- rnorm(V, mean = 1)
+  
+  d_univ$m[ii] <- euclidean2(x, y) / V
+  d_univ$u[ii] <- euclidean2(sum(x), sum(y)) / V
+  
+}
+
+```
+
+
+Now the univariate distance is larger.
+
+```{r}
+
+colMeans(d_univ)
+apply(d_univ, 2, var)
+t.test(d_univ$m, d_univ$u, paired = TRUE)$statistic
+
+hist(d_univ$m)
+hist(d_univ$u)
+
+kernel_d2_univ <- kde2d(d_univ$m, d_univ$u)
+image(kernel_d2_univ, col = r, main = "euclidean^2", xlab = "multivariate", ylab = "univariate")
+
+```
+
+
+
+### multivariate (non-uniform) effect
+
+```{r}
+
+d_multiv <- as.data.frame(matrix(NA, ncol = 2, nrow = n_sim))
+names(d_multiv) <- c("m", "u")
+
+subj_pattern <- scale(rnorm(V), scale = FALSE)  ## no univariate effect
+
+for (ii in 1:n_sim) {
+
+  x <- rnorm(V) + subj_pattern  ## pattern across vertices, but across-voxel mean of 0
+  y <- rnorm(V) - subj_pattern  ## opposite pattern
+  
+  d_multiv$m[ii] <- euclidean2(x, y) / V  ## multivariate distance
+  d_multiv$u[ii] <- euclidean2(sum(x), sum(y)) / V  ## univariate distance
+  
+}
+
+```
+
+
+Now the multivariate distance is larger.
+
+```{r}
+
+colMeans(d_multiv)
+apply(d_multiv, 2, var)
+t.test(d_multiv$m, d_multiv$u, paired = TRUE)$statistic
+
+hist(d_multiv$m)
+hist(d_multiv$u)
+
+kernel_d2_multiv <- kde2d(d_multiv$m, d_multiv$u)
+image(kernel_d2_multiv, col = r, main = "euclidean^2", xlab = "multivariate", ylab = "univariate")
+
+```
+
+
+## intersubject discrimination index (IDI)
+
+
+### no effect
+
+```{r simulation_idi}
+
+d <- as.data.frame(matrix(NA, ncol = 2, nrow = n_sim))
+names(d) <- c("m", "u")
+
+for (ii in 1:n_sim) {
+
+  X <- matrix(rnorm(V*S), nrow = S)
+  Y <- matrix(rnorm(V*S), nrow = S)
+  ## X is a matrix of b-coefficients. subjects as rows, vertices as columns. from fold 1 (e.g., "test").
+  ## Y is also a b-coefficient matrix. organized identically to X, but from a different "fold" (e.g., "retest").
+  
+  X_bar <- cbind(rowSums(X))  ## across-vertex sum of b-coefficients. one per subj.
+  Y_bar <- cbind(rowSums(Y))
+  
+  M <- pdist2(X, Y)  ## multivariate distance
+  U <- pdist2(X_bar, Y_bar) ## univariate distance
+  
+  d$m[ii] <- idi(M)  ## mIDI
+  d$u[ii] <- idi(U)  ## uIDI
+
+}
+
+
+```
+
+
+```{r}
+
+colMeans(d)
+apply(d, 2, var)
+apply(d, 2, function(x) t.test(x)$statistic)
+apply(d, 2, function(x) wilcox.test(x)$p.value)
+t.test(d$m, d$u, paired = TRUE)$statistic
+wilcox.test(d$m, d$u, paired = TRUE)$p.value
+
+hist(d$m)
+hist(d$u)
+
+kernel_d2 <- kde2d(d$m, d$u)
+image(kernel_d2, col = r, main = "intersubject discrimination index", xlab = "multivariate", ylab = "univariate")
+
+```
+
+
+### univariate (uniform) effect
+
+
+```{r}
+
+d_univ <- as.data.frame(matrix(NA, ncol = 2, nrow = n_sim))
+names(d_univ) <- c("m", "u")
+
+for (ii in 1:n_sim) {
+  
+  subj_means <- matrix(rnorm(S), nrow = V, ncol = S, byrow = TRUE)
+  X <- matrix(rnorm(V*S), ncol = S) + subj_means  ## add a pattern to each row
+  Y <- matrix(rnorm(V*S), ncol = S) + subj_means
+  
+  d_univ$m[ii] <- idi(pdist2(t(X), t(Y)) / V)  ## multivariate distance
+  d_univ$u[ii] <- idi(pdist2(cbind(colSums(X)), cbind(colSums(Y))) / V)  ## univariate distance
+  
+}
+
+```
+
+Now the univariate distance is larger.
+
+```{r}
+
+colMeans(d_univ)
+apply(d_univ, 2, var)
+t.test(d_univ$m, d_univ$u, paired = TRUE)$statistic
+
+hist(d_univ$m)
+hist(d_univ$u)
+
+kernel_d2_univ <- kde2d(d_univ$m, d_univ$u)
+image(kernel_d2_univ, col = r, main = "euclidean^2", xlab = "multivariate", ylab = "univariate")
+
+```
+
+
+### multivariate (non-uniform) effect
+
+```{r}
+
+d_multiv <- as.data.frame(matrix(NA, ncol = 2, nrow = n_sim))
+names(d_multiv) <- c("m", "u")
+
+for (ii in 1:n_sim) {
+  
+  subj_patterns <- matrix(rnorm(V*S), ncol = S)
+  subj_patterns <- scale(subj_patterns, scale = FALSE)
+  X <- matrix(rnorm(V*S), ncol = S) + subj_patterns
+  Y <- matrix(rnorm(V*S), ncol = S) + subj_patterns
+  
+  d_multiv$m[ii] <- idi(pdist2(t(X), t(Y)) / V)  ## multivariate distance
+  d_multiv$u[ii] <- idi(pdist2(cbind(colSums(X)), cbind(colSums(Y))) / V)  ## univariate distance
+  
+}
+
+```
+
+
+Now the multivariate distance is larger.
+
+```{r}
+
+colMeans(d_multiv)
+apply(d_multiv, 2, var)
+t.test(d_multiv$m, d_multiv$u, paired = TRUE)$statistic
+
+hist(d_multiv$m)
+hist(d_multiv$u)
+
+kernel_d2_multiv <- kde2d(d_multiv$m, d_multiv$u)
+image(kernel_d2_multiv, col = r, main = "euclidean^2", xlab = "multivariate", ylab = "univariate")
+
+```
+

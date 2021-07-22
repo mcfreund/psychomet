@@ -1,0 +1,40 @@
+prereqs
+	- validate hilo RSA in each task
+		- prewhitening and cross-validated simil
+		- determine target TRs
+
+
+1. static
+2. time-resolved
+
+
+'STATIC' ANALYSIS: COMPARE SPATIAL DISTRIBUTIONS
+
+for each task:
+
+	1. assemble contrast array per ROI (average across target TRs)
+
+	2. calculate fingerprint distance, full dimensionality
+		* prew euclidean distance
+		-> impact of prewhitening on coverage (do with raw)?
+		-> impact of standardization on coverage (do with correlation)?
+		
+	3. calculate fingerprint distance, single dimension
+		* prew euclidean distance
+		-> impact of prewhitening on coverage (do with raw)?
+	
+	4. calculate fingerprint distance, increasing dimensionality
+		
+		
+		
+		vectorized_pdist <- function(A,B) 
+    an = apply(A, 1, function(rvec) crossprod(rvec,rvec))
+    bn = apply(B, 1, function(rvec) crossprod(rvec,rvec))
+
+    m = nrow(A)
+    n = nrow(B)
+
+    tmp = matrix(rep(an, n), nrow=m) 
+    tmp = tmp +  matrix(rep(bn, m), nrow=m, byrow=TRUE)
+    sqrt( tmp - 2 * tcrossprod(A,B) )
+}

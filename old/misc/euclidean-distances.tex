@@ -1,0 +1,95 @@
+\documentclass[]{article}
+
+\usepackage{amsmath}
+
+%opening
+\title{comparing univariate and multivariate techniques with euclidean distance}
+\author{mike freund}
+
+\begin{document}
+
+\maketitle
+
+
+\section*{notation}
+
+For a given subject, task, and parcel, let $x_v$ be the vector of ``raw data" (i.e., the contrast estimates obtained from the GLM: e.g., Hi\textunderscore Lo in Stroop).
+I'll call this vector the ``activation pattern" (a pattern across vertices).
+The subscript $v$ indexes the vertex within the parcel, where $v \text{ in } 1, \dots, V$ vertices.
+I'll indicate which subject the data are from by the superscript $x_v^{(s)}$, for $s \text{ in } 1, \dots, S$ subjects.
+E.g., for subject $s = 1$, the activation pattern is indicated by $x_v^{(1)}$.
+
+\section*{euclidean distance: multivariate case}
+
+The distance between subject 1 and 2's activation patterns is given by
+
+\begin{equation}
+	\textit{multivariate d}(1, 2) = \sqrt{\sum_{v = 1}^{V}(x_v^{(1)} - x_v^{(2)})^2}
+\end{equation}
+
+
+But, we will want to use this formula instead:
+
+\begin{equation}
+	\textit{multivariate d}_{\text{scaled}}(1, 2) = 
+	\sqrt{
+		\frac
+		{\sum_{v = 1}^{V}(x_v^{(1)} - x_v^{(2)})^2}
+		{V}
+	}
+\end{equation}
+
+This is because the magnitude of $d^2$ will scale with the number of dimensions $V$.
+Our main goal is to compare the sensitivity of $d$ when all dimensions are used, to when only one is used (the mean).
+Dividing the distances by $\sqrt{V}$ puts these metrics on the same scale.
+
+\section*{euclidean distance: univariate case}
+
+We will use the same formula for the univariate case.
+However, now, we will not compute the distances between the pattern vectors $x_v^{(s)}$, but between the \textit{means} of the pattern vectors.
+
+So, first, calculate the across-vertex mean of each pattern vector
+\[
+\bar{x}^{(1)} = \frac{1}{V} \sum_{v = 1}^{V}{x}_v^{(1)}
+\]
+
+and 
+\[
+\bar{x}^{(2)} = \frac{1}{V} \sum_{v = 1}^{V}{x}_v^{(2)}
+\]
+
+Then simply plugging these guys into Equation 2, we get
+
+\[
+\textit{univariate d}_{\text{scaled}}(1, 2) = \sqrt{\frac{\sum_{v = 1}^{V}(\bar{x}^{(1)} - \bar{x}^{(2)})^2}{V}}
+\]
+
+But because ``$V$'', in this case, actually equals 1 (the mean is a scalar value), we can remove the denominator and summation operation
+
+\[
+\textit{univariate d}_{\text{scaled}}(1, 2) = \sqrt{(\bar{x}^{(1)} - \bar{x}^{(2)})^2}
+\]
+
+which is equal to the absolute value of the difference between means:
+
+\begin{equation}
+	\textit{univariate d}_{\text{scaled}}(1, 2) = |\bar{x}^{(1)} - \bar{x}^{(2)}|
+\end{equation}
+
+
+\section*{inferential statistics to perform}
+
+
+There are three things we want to know:
+\begin{enumerate}
+	\item Perform the within--between subject `fingerprinting' procedure using the \textit{univariate d} (Equation 3). I.e., contrast the average within-subject, between-run \textit{univariate d} with the average \textit{between}-subject, between-run \textit{univariate d}.
+	In which parcels is this contrast significantly \textit{less than zero}? (I.e., smaller within-subject distance than between-subject distance)?
+	\item Perform the same `fingerprinting' procedure using the \textit{multivariate d} (Equation 2); which parcels are identified as being significant?
+	\item Directly compare the magnitude of the contrast statistic between \textit{univariate} and \textit{multivariate} measures.
+	This could be performed via a paired-sample t-test.
+\end{enumerate}
+
+
+
+
+\end{document}

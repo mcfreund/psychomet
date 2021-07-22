@@ -1,0 +1,596 @@
+---
+title: 'intersubject discrimination: impact of dimensionality on IDI'
+author: "michael freund"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    highlight: zenburn
+    number_sections: true
+    theme: spacelab
+---
+
+
+# intro
+
+Purpose: 
+
+To assess the impact of number of dimensions on intersubject discrimination indices.
+
+ 
+
+```{r setup, include = FALSE}
+
+source(here::here("code", "_packages.R"))
+source(here("code", "read-behav.R"))
+source(here("code", "_vars.R"))
+source(here("code", "_atlases.R"))
+source(here("code", "_settings.R"))
+source(here("code", "_funs.R"))
+
+## data ----
+
+d <- fread(here("out", "fprint", "unimulti_hilo_target_schaefer400-07", "idi_group_svd.csv"))
+d.max <- fread(here("out", "fprint", "unimulti_hilo_target_schaefer400-07", "idi_group.csv"))
+
+d <- d %>%
+  
+  melt(
+    id.vars = c("task", "transform", "parcel", "ndim"), 
+    measure.vars = list(
+      estimate = grep("^estimate", names(.)),
+      se = grep("^se", names(d)),
+      p = c("p", "p_cv"),
+      lb = grep("^lb", names(d)),
+      ub = grep("^ub", names(d))
+    ),
+    variable.name = "type"
+    ) %>%
+  
+  mutate(type = ifelse(type == 1, "noncv", "cv"))
+
+
+d <- d %>%
+  
+  group_by(type, transform, ndim, task) %>%
+  mutate(
+    p.fdr = p.adjust(p, "fdr"),
+    network = get.network(parcel),
+    hemi = substr(parcel, 1, 1),
+    num.roi = match(parcel, parcellation$key)
+  ) %>%
+  
+  arrange(type, transform, task, ndim, num.roi) %>%
+  
+  as.data.table
+
+
+d.max <- d.max %>%
+  
+  group_by(variable, transform, task) %>%
+  mutate(
+    p.fdr = p.adjust(p, "fdr"),
+    network = get.network(parcel),
+    hemi = substr(parcel, 1, 1),
+    num.roi = match(parcel, parcellation$key)
+  ) %>%
+  
+  arrange(transform, task, variable, num.roi) %>%
+  
+  as.data.table
+
+
+parcels.axcpt.midi <- 
+  d.max %>% 
+  filter(p.fdr < 0.05, estimate > 0, transform == "unscaled", variable == "multivariate", task == "Axcpt") %>% 
+  pull(parcel)
+
+parcels.stroop.midi <- 
+  d.max %>% 
+  filter(p.fdr < 0.05, estimate > 0, transform == "unscaled", variable == "multivariate", task == "Stroop") %>% 
+  pull(parcel)
+
+
+```
+
+
+Description:
+
+
+<!-- * Beta contrast patterns ($\text{high} - \text{low}$) were estimated for each run -->
+<!-- * with these contrast patterns, two types of euclidean distances were estimated: -->
+<!--   * across-run, within-subject distances -->
+<!--   * across-run, betwen-subject distances -->
+<!-- * the mean within-subject distance was subtracted from the mean between-subject distance -->
+<!-- * this formed the "multivariate" intersubject discrimintion index (IDI) -->
+<!-- * the same procedure was conducted on beta contrast *means*, to form the "univariate" IDI -->
+<!-- * these IDIs were tested against zero, and were also directly contrasted between univariate and multivariate. -->
+
+<!-- Inferential statistics: -->
+
+<!-- * non-parametric bootstrap tests were conducted: -->
+<!--   * subjects resampled, and IDIs recalculated to form bootstrapped distributions -->
+<!--   * 95% intervals were calculated on bootstrapped distributions with BCa method -->
+<!--   * frequentists p-values derived from percentile bootstrap -->
+<!--   * all p-value corrections were performed whole-cortex, with FDR. -->
+
+<!-- Parcellation: -->
+
+<!--   * Schaefer 400, 7 network -->
+
+<!-- GLMs: -->
+
+<!--   * DMCC55B -->
+<!--   * run-wise, 1trpk, shifted TENTs -->
+<!--   * Cuedts: terms for $\text{trial-type (congr, incon)}\times\text{sequence (switch, repeat)}$ instead of $\text{incentive}$ -->
+
+<!-- Target TRs: -->
+
+<!--   * Axcpt: `r target.trs$Axcpt` -->
+<!--   * Cuedts: `r target.trs$Cuedts` -->
+<!--   * Stern: `r target.trs$Stern` -->
+<!--   * Stroop: `r target.trs$Stroop` -->
+
+<!-- Contrasts: -->
+
+<!--   * Axcpt: $\text{BY} - \text{BX}$ -->
+<!--   * Cuedts: $(\text{InConSwitch} + \text{InConRepeat} - \text{ConSwitch} - \text{ConRepeat})/2$ -->
+<!--   * Stern: $\text{LL5RN} - \text{LL5NN}$ -->
+<!--   * Stroop: $(\text{PC50InCon} + \text{biasInCon} - \text{PC50Con} - \text{biasCon})/2$ -->
+
+<!-- Transforms: -->
+
+<!--   * "scaled": beta coefficients were divided by their root mean sum of squares prior to IDI procedure. -->
+<!--   * non-prewhitened patterns -->
+
+
+
+# stats
+
+```{r, fig.width = 12, fig.height = 8}
+
+
+d %>%
+  
+  # filter(get.network(parcel) %in% c("Cont", "SalVentAttn"), task == "Axcpt") %>%
+
+  filter(task == "Axcpt", parcel %in% parcels.axcpt.midi) %>%
+  
+  ggplot(aes(ndim, estimate / se, color = type)) +
+  geom_hline(yintercept = 0) +
+  geom_line(size = 2) +
+  # geom_errorbar(aes(ymin = estimate - se, ymax = estimate + se), width = 0) +
+  
+  facet_wrap(vars(parcel)) +
+  
+  scale_color_viridis_d()
+
+
+d %>%
+  
+  filter(parcel %in% parcels.stroop.midi, task == "Stroop") %>%
+  
+  ggplot(aes(ndim, estimate / se, color = type)) +
+  geom_errorbar(aes(ymin = estimate / se - 1, ymax = estimate / se + 1), width = 0) +
+
+  geom_line(size = 2) +
+
+  facet_wrap(vars(parcel)) +
+  scale_color_viridis_d()
+
+
+
+d %>%
+  
+  filter(get.network(parcel) %in% c("Limbic"), task == "Stern") %>%
+  
+  ggplot(aes(ndim, estimate / se, color = type)) +
+  geom_hline(yintercept = 0) +
+  geom_line(size = 2) +
+  
+  facet_wrap(vars(parcel))
+
+d %>%
+  
+  filter(get.network(parcel) %in% c("Cont", "SalVentAttn"), task == "Cuedts") %>%
+  
+  ggplot(aes(ndim, estimate / se, color = type)) +
+  geom_hline(yintercept = 0) +
+  geom_line(size = 2) +
+
+  facet_wrap(vars(parcel))
+
+  f
+d %>%
+  
+  group_by(task, parcel, type) %>%
+  mutate(
+    is.in.range = (estimate / se) >= max(estimate / se) - 1
+  ) %>%
+  
+  filter(is.in.range) %>%
+  slice_min(ndim, 1) %>%
+  
+  # filter(parcel %in% parcels.stroop.midi, task == "Stroop") %>%
+  
+  ggplot(aes(ndim, fill = type)) +
+  geom_histogram() +
+  
+  facet_grid(vars(task))
+
+
+
+
+d %>%
+  
+  filter(type == "noncv") %>%
+  
+  group_by(task, parcel) %>%
+  mutate(
+    pseudo.t = estimate / se,
+    prop.max = pseudo.t / max(pseudo.t)
+    ) %>%
+  filter(prop.max >= 0.9) %>%
+  slice_min(ndim) %>%
+  
+  ggplot(aes(estimate / se, ndim, color = p.fdr < 0.05 & estimate > 0)) +
+  geom_point() +
+  
+  facet_grid(vars(task)) +
+  
+  scale_color_manual(values = c("TRUE" = "firebrick1", "FALSE" = "black"))
+
+
+
+d %>%
+  
+  filter(type == "noncv", task == "Stroop") %>%
+  
+  group_by(task, parcel) %>%
+  transmute(
+    
+    ndim = ndim,
+    estimate.max = estimate[ndim == max(ndim)], 
+    se.max = se[ndim == max(ndim)],
+    pseudo.t = estimate / se,
+    pseudo.t.max = estimate.max / se.max,
+    prop.max = pseudo.t / pseudo.t.max
+    
+    ) %>%
+  
+  filter(prop.max >= 0.9) %>%
+  slice_min(ndim) %>%
+  
+  ggplot(aes(estimate.max, ndim, color = parcel %in% parcels.stroop.midi)) +
+  geom_point() +
+  
+  scale_color_manual(values = c("TRUE" = "firebrick1", "FALSE" = "black")) +
+  
+  theme(legend.position = "none")
+
+
+d %>%
+  
+  filter(type == "noncv", task == "Stroop", parcel %in% parcels.stroop.midi) %>%
+  
+  group_by(task, parcel) %>%
+  transmute(
+    
+    ndim = ndim,
+    estimate.max = estimate[ndim == max(ndim)], 
+    # prop.max = estimate / estimate.max
+    se.max = se[ndim == max(ndim)],
+    pseudo.t = estimate / se,
+    pseudo.t.max = estimate.max / se.max,
+    prop.max = pseudo.t / pseudo.t.max
+    
+    ) %>% 
+  
+  filter(prop.max >= 0.9) %>%
+  slice_min(ndim) %>% 
+  
+  ggplot(aes(ndim)) +
+  geom_histogram(bins = 20, color = "black")
+
+d %>%
+  
+  filter(type == "cv", task == "Axcpt", parcel %in% parcels.axcpt.midi) %>%
+  
+  group_by(task, parcel) %>%
+  transmute(
+    
+    ndim = ndim,
+    estimate.max = estimate[ndim == max(ndim)], 
+    # prop.max = estimate / estimate.max
+    se.max = se[ndim == max(ndim)],
+    pseudo.t = estimate / se,
+    pseudo.t.max = estimate.max / se.max,
+    prop.max = pseudo.t / pseudo.t.max
+    
+    ) %>% 
+  
+  filter(prop.max >= 0.9) %>%
+  slice_min(ndim) %>% 
+  
+  ggplot(aes(ndim)) +
+  geom_histogram(bins = 20, color = "black")
+
+d %>%
+  
+  filter(type == "cv", task == "Axcpt", parcel %in% parcels.axcpt.midi) %>%
+  
+  group_by(task, parcel) %>%
+  mutate(
+    
+    ndim = ndim,
+    estimate.max = estimate[ndim == max(ndim)], 
+    # prop.max = estimate / estimate.max
+    se.max = se[ndim == max(ndim)],
+    pseudo.t = estimate / se,
+    pseudo.t.max = estimate.max / se.max,
+    prop.max = pseudo.t / pseudo.t.max
+    
+    ) %>% 
+  
+  # filter(prop.max >= 0.9) %>%
+  # slice_min(ndim) %>% 
+  
+  ggplot(aes(ndim, estimate / se)) +
+  geom_point() +
+  geom_line(aes(group = parcel))
+
+
+
+  # 
+  # 
+  # 
+  # 
+  # ggplot(aes(estimate.max, ndim, color = parcel %in% parcels.stroop.midi)) +
+  # geom_point() +
+  # 
+  # scale_color_manual(values = c("TRUE" = "firebrick1", "FALSE" = "black")) +
+  # 
+  # theme(legend.position = "none")
+
+  
+
+d %>%
+  
+  filter(type == "cv", task == "Axcpt", parcel %in% parcels.axcpt.midi) %>%
+  
+  group_by(task, parcel) %>%
+  transmute(
+    
+    ndim = ndim,
+    estimate.max = estimate[ndim == max(ndim)], 
+    # prop.max = estimate / estimate.max
+    se.max = se[ndim == max(ndim)],
+    pseudo.t = estimate / se,
+    pseudo.t.max = estimate.max / se.max,
+    prop.max = pseudo.t / pseudo.t.max
+    
+    ) %>% 
+  
+  filter(prop.max >= 0.9) %>%
+  slice_min(ndim) %>% View
+  
+  pull(ndim) %>% hist
+  
+
+
+
+d %>%
+  
+  filter(task == "Axcpt", parcel %in% parcels.axcpt.midi, type == "cv") %>%
+  
+  ggplot(aes(ndim, estimate/se, color = parcel)) +
+  geom_line(size = 1.25, alpha = 0.75) +
+  
+  stat_smooth(color = "black", size = 3) +
+  
+  # geom_vline(xintercept = 5) +
+  # geom_vline(xintercept = 10) +
+   
+  scale_color_viridis_d() +
+  theme(legend.position = "none") +
+  labs(y = "MIDI / se", x = "number of dimensions", title = "AXCPT")
+
+d %>%
+  
+  filter(task == "Stroop", parcel %in% parcels.stroop.midi, type == "cv") %>%
+  
+  ggplot(aes(ndim, estimate/se, color = parcel)) +
+  geom_line(size = 1.25, alpha = 0.75) +
+  
+  stat_smooth(size = 3, color = "black") +
+  
+  # geom_vline(xintercept = 5) +
+  # geom_vline(xintercept = 10) +
+   
+  scale_color_viridis_d() +
+  theme(legend.position = "none") +
+  labs(y = "MIDI / se", x = "number of dimensions", title = "Stroop")
+
+
+
+d %>%
+  
+  group_by(task, parcel, type) %>%
+  mutate(
+    pseudo.t = estimate / se,
+    prop.max = pseudo.t / max(pseudo.t)
+    ) %>%
+  
+  filter(prop.max >= 0.9) %>%
+  slice_min(ndim) %>%
+  # filter(type == "noncv", task == "Stroop", parcel %in% parcels.stroop.midi) %>%
+  filter(type == "noncv", task == "Axcpt", parcel %in% parcels.axcpt.midi) %>%
+  ggplot(aes(ndim, fill = task)) +
+  geom_histogram() +
+  facet_grid(vars(network))
+  
+
+
+
+
+
+
+
+d.max %>%
+  
+  select(task, transform, parcel, variable, estimate, p.fdr) %>%
+  dcast(task + transform + parcel ~ variable, value.var = c("estimate", "p.fdr")) %>%
+  
+  ggplot(aes(estimate_multivariate, estimate_univariate)) +
+  
+  geom_abline() +
+  geom_hline(yintercept = 0) +
+  geom_vline(xintercept = 0) +
+  geom_point() +
+  geom_point(size = 2, color = "white", shape = 21, aes(fill = p.fdr_multivariate < 0.05 | p.fdr_univariate < 0.05)) +
+  
+  scale_fill_manual(
+    values = c("TRUE" = "firebrick", "FALSE" = "black"), 
+    labels = c("TRUE" = "pFDR<0.05", "FALSE" = "pFDR>=0.05"),
+    name = NULL
+    ) +
+  theme(legend.position = "top") +
+  
+  facet_grid(vars(transform), cols = vars(task), scales = "free") +
+  
+  labs(
+    title = "mean univariate versus multivariate contrasts per parcel: scaled", 
+    x = "multivariate contrast (b/n - w/i)", 
+    y = "univariate contrast (b/n - w/i)",
+    caption = "p-value from non-parametric bootstrap"
+    )
+
+
+```
+
+```{r fig.width = 8, fig.height = 11}
+
+d.max %>%
+  
+  filter(transform == "unscaled") %>%
+  
+  
+  dcast(task + transform + parcel ~ variable, value.var = c("estimate", "p.fdr")) %>%
+  filter(estimate_multivariate > 0, estimate_univariate > 0) %>%
+  
+  
+  ggplot(aes(estimate_multivariate, estimate_univariate, color = p.fdr_contrast < 0.05)) +
+  
+  geom_abline() +
+  geom_hline(yintercept = 0) +
+  geom_vline(xintercept = 0) +
+  geom_point() +
+  
+  facet_grid(cols = vars(task), rows = vars(get.network(parcel)), scales = "free") +
+  
+  scale_color_manual(
+    values = c("TRUE" = "firebrick", "FALSE" = "black"), 
+    labels = c("TRUE" = "pFDR<0.05", "FALSE" = "pFDR>=0.05"),
+    name = NULL
+    ) +
+  theme(legend.position = "top") +
+  
+  scale_x_continuous(n.breaks = 3) +
+  scale_y_continuous(n.breaks = 3) +
+  
+  labs(
+    title = "mean univariate versus multivariate contrasts per parcel: unscaled", 
+    x = "multivariate contrast (b/n - w/i)", 
+    y = "univariate contrast (b/n - w/i)",
+    caption = "p-value from non-parametric bootstrap\nplots exclude contrasts<0"
+    )
+
+
+
+
+d %>%
+  
+  filter(transform == "scaled") %>%
+  
+  
+  dcast(task + transform + parcel ~ variable, value.var = c("estimate", "p.fdr")) %>%
+  filter(estimate_multivariate > 0, estimate_univariate > 0) %>%
+  
+  
+  ggplot(aes(estimate_multivariate, estimate_univariate, color = p.fdr_contrast < 0.05)) +
+  
+  geom_abline() +
+  geom_hline(yintercept = 0) +
+  geom_vline(xintercept = 0) +
+  geom_point() +
+  
+  facet_grid(cols = vars(task), rows = vars(get.network(parcel)), scales = "free") +
+  
+  scale_color_manual(
+    values = c("TRUE" = "firebrick", "FALSE" = "black"), 
+    labels = c("TRUE" = "pFDR<0.05", "FALSE" = "pFDR>=0.05"),
+    name = NULL
+    ) +
+  theme(legend.position = "top") +
+  
+  scale_x_continuous(n.breaks = 3) +
+  scale_y_continuous(n.breaks = 3) +
+  
+  labs(
+    title = "mean univariate versus multivariate contrasts per parcel: scaled", 
+    x = "multivariate contrast (b/n - w/i)", 
+    y = "univariate contrast (b/n - w/i)",
+    caption = "p-value from non-parametric bootstrap\nplots exclude contrasts<0"
+    )
+
+
+```
+
+
+
+# maps
+
+NB: dark colors are large effects and yellow/light colors are small effectss.
+
+```{r brains, fig.width = 15, results = "asis"}
+
+
+for (task.i in tasks) {
+  
+  cat(sprintf("\n## %s", task.i))
+  cat("\n")
+  
+  for (variable.i in c("univariate", "multivariate", "contrast")) {
+
+    cat(sprintf("\n### %s", variable.i))
+    cat("\n")
+    
+    for (transform.i in c("unscaled", "scaled")) {
+      
+      cat(sprintf("\n#### %s ", transform.i))
+      # cat("\n")
+      
+      d %>%
+        
+        filter(task == task.i, transform == transform.i, variable == variable.i) %>%
+    
+        build_overlay("estimate", template = schaefer) %>%
+        plot_surface(underlay = hcp, hues = rev(viridis::inferno(500)))
+      
+      d %>%
+        
+        filter(task == task.i, transform == transform.i, variable == variable.i) %>%
+        mutate(estimate = ifelse(p.fdr < 0.05, estimate, 0)) %>%
+
+        build_overlay("estimate", template = schaefer) %>%
+        plot_surface(underlay = hcp, hues = rev(viridis::inferno(500)))
+      
+    }
+    
+  }
+    
+}
+
+
+```
+
