@@ -1,7 +1,7 @@
 
-source(here::here("code", "_packages.R"))
-source(here("code", "read-behav.R"))
-source(here("code", "_vars.R"))
+#source(here::here("code", "_packages.R"))
+#source(here("code", "read-behav.R"))
+source(here("code", "_constants.R"))
 source(here("code", "_atlases.R"))
 source(here("code", "_settings.R"))
 source(here("code", "_funs.R"))
