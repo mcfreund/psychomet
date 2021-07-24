@@ -1,7 +1,7 @@
 ## system info
 
-nodename <- Sys.info()["nodename"]
 n_cores <- parallel::detectCores()
+
 
 ## image, design, analysis info
 
@@ -23,7 +23,7 @@ n_trs <- c(
 
 tasks <- c("Axcpt", "Cuedts", "Stern", "Stroop")
 
-subjs_ub55 <- read.csv(here::here("..", "ub55", "in", "ub55_subjects.txt"))
+subjs_ub55 <- data.table::fread(here::here("..", "ub55", "in", "ub55_subjects.txt"))[[1]]
 subjs_test <- c()
 subjs_retest <- c()
 

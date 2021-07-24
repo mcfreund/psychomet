@@ -1,18 +1,28 @@
-
 #source(here::here("code", "_packages.R"))
 #source(here("code", "read-behav.R"))
+library(here)
+library(dplyr)
+library(data.table)
+library(ggplot2)
+library(grid)
+library(gridExtra)
+library(abind)
+library(doParallel)
+library(foreach)
+#library(mikeutils)
+
 source(here("code", "_constants.R"))
-source(here("code", "_atlases.R"))
-source(here("code", "_settings.R"))
 source(here("code", "_funs.R"))
+source(here("code", "_masks.R"))
+#source(here("code", "_settings.R"))
+#source(here("code", "_funs.R"))
 
 
-subjs <- subjs[!subjs %in% "432332"]
-
+subjs <- subjs_ub55[!subjs_ub55 %in% "432332"]
 
 glminfo <- data.frame(
   task = c("Axcpt", "Cuedts", "Stern", "Stroop"),
-  name.glm = c(
+  name_glm = c(
     "baseline_Cues_EVENTS_censored_shifted",
     "baseline_CongruencySwitch_EVENTS_censored_shifted",
     "baseline_ListLength_EVENTS_censored_shifted",
@@ -21,13 +31,13 @@ glminfo <- data.frame(
   stringsAsFactors = FALSE
 )
 glminfo <- as.data.table(glminfo)
-lev1 = list(
+hi <- list(
   Axcpt = "BX",
   Cuedts = c("InConInc", "InConNoInc"),
   Stern = "LL5RN",
   Stroop = c("biasInCon", "PC50InCon")
 )
-lev2 = list(
+lo <- list(
   Axcpt = "BY",
   Cuedts = c("ConInc", "ConNoInc"),
   Stern = "LL5NN",
@@ -35,127 +45,152 @@ lev2 = list(
 )
 
 
-## loop ----
 
-cl <- makeCluster(nrow(glminfo))
-registerDoParallel(cl)
-time.start <- Sys.time()
-z <- foreach(
-  glm.i = seq_len(nrow(glminfo)), .inorder = FALSE, .verbose = TRUE,
-  .combine = c,
-  .packages = c("mikeutils", "here", "data.table", "ggplot2", "grid", "gridExtra", "dplyr", "abind")
-  ) %dopar% {
-  # glm.i = 1
-  
-  res <- enlist(parcellation$key)
-  
-  name.glm.i <- glminfo[glm.i]$name.glm
-  name.task.i <- glminfo[glm.i]$task
-  
-  
-  out.dir <- here("out", "psychomet", "unimulti_hilo_target_schaefer400-07")
-  if (!dir.exists(out.dir)) dir.create(out.dir, recursive = TRUE)
-  
-  fig.dir <-file.path(out.dir, "dmat_figs", paste0(name.task.i, "_", name.glm.i))
-  if (!dir.exists(fig.dir)) dir.create(fig.dir, recursive = TRUE)
-  
-  ## read betas:
-  
-  betas.i <- readRDS(
-    here::here("out", "glms", paste0("betas_", glminfo[glm.i]$task, "_", glminfo[glm.i]$name.glm,  ".RDS"))
-  )
-  
-  betas.i <- betas.i[, , , !dimnames(betas.i)$subj %in% "432332", ]  ## remove subj with missing data
-  
-  ## average across target TRs:
-  betas.i <- abind(
-    apply(betas.i[, lev1[[glm.i]], target.trs[[glm.i]], , ], c("vertex", "subj", "run"), mean),
-    apply(betas.i[, lev2[[glm.i]], target.trs[[glm.i]], , ], c("vertex", "subj", "run"), mean),
-    along = 0
-  )   ## condition, vertex, subj, run
-  names(dimnames(betas.i)) <- c("condition", "vertex", "subj", "run")
-  dimnames(betas.i)$condition <- c("lev1", "lev2")
-  
-  for (do.scale in c(TRUE, FALSE)) {
-    
-    suffix <- switch(do.scale + 1, "", "scaled_")  ## false, true
-    
-    D <- 
-      array(
-        NA, 
-        dim = c(length(subjs), length(subjs), length(parcellation$key), 2), 
-        dimnames = list(subj_run1 = subjs, subj_run2 = subjs, parcellation$key, type = c("univariate", "multivariate"))
-      )
-    
-    for (parcel.i in seq_along(parcellation$key)) {
-      # parcel.i = 1
+## 1. get contrast arrays
+## 2. loop over tasks*ROIs
+## 3. compute distance matrices and save.
+
+
+## setup output directory
+
+out_dir <- here("out", "id")
+if (!dir.exists(out_dir)) dir.create(out_dir, recursive = TRUE)
+
+
+for (glm_i in seq_len(nrow(glminfo))) {
+	# glm_i = 1
+	
+	name_glm_i <- glminfo[glm_i]$name_glm
+	name_task_i <- glminfo[glm_i]$task	  
+	
+	fig_dir <- file.path(out_dir, "dists_figs", paste0(name_task_i, "_", name_glm_i))
+	if (!dir.exists(fig_dir)) dir.create(fig_dir, recursive = TRUE)
+	
+	## prepare betas
+	
+	betas_i <- readRDS(
+		here("..", "ub55", "out", "glms", paste0("betas_", glminfo[glm_i]$task, "_", glminfo[glm_i]$name_glm,  ".RDS"))
+	)
+	betas_i <- betas_i[, , , !dimnames(betas_i)$subj %in% "432332", ]  ## remove subj with missing data
+	
+	## average across target TRs: 
+	betas_i <- abind(
+		apply(betas_i[, hi[[glm_i]], target_trs[[glm_i]], , ], c("vertex", "subj", "run"), mean),
+		apply(betas_i[, lo[[glm_i]], target_trs[[glm_i]], , ], c("vertex", "subj", "run"), mean),
+		along = 0
+	)   ## condition, vertex, subj, run
+	names(dimnames(betas_i)) <- c("condition", "vertex", "subj", "run")
+	dimnames(betas_i)$condition <- c("hi", "lo")
+	
+	
+	## estimate distance matrices
+	
+	cl <- makeCluster(n_cores/2)
+	registerDoParallel(cl)
+	time.start <- Sys.time()
+	
+	z <- foreach(
+	  roi_i = seq_along(parcellation$key), .verbose = TRUE,
+	  .packages = c("mikeutils", "here", "data.table", "ggplot2", "grid", "gridExtra", "dplyr", "abind")
+	  ) %dopar% {
+      # roi_i = 1
       
-      is.parcel <- schaefer10k == parcel.i
-      B <- betas.i[, is.parcel, , ]
-      
-      if (do.scale) {
-        
-        nvert <- dim(B)[2]
-        B <- sweep(
-          B,
-          c(1, 3, 4),
-          sqrt(apply(B, c("condition", "subj", "run"), function(x) sum(x^2)) / nvert),
-          "/"
-          )  ## divisive normalization by root mean square
-        
-      }
-      
-      B_contrast <- B["lev1", , , ] - B["lev2", , , ]  ## get contrast
-      
-      B1 <- t(B_contrast[, , 1])  ## separate by runs
-      B2 <- t(B_contrast[, , 2])
-      
-      ## multivariate:
-      
-      D[, , parcel.i, "multivariate"] <- pdist2(B1, B2) / ncol(B1)  ## divide by number of features (vertices)
+		is_roi <- schaefer10k == roi_i
+		B <- betas_i[, is_roi, , ]
+	  
+		D <- 
+			array(
+				NA, 
+				dim = c(length(subjs), length(subjs), 2), 
+				dimnames = list(
+					subj_run1 = subjs, subj_run2 = subjs, type = c("univariate", "multivariate")
+				)
+			)
+			
+		B_contrast <- B["hi", , , ] - B["lo", , , ]  ## get contrast
+
+		B1 <- t(B_contrast[, , 1])  ## separate by runs
+		B2 <- t(B_contrast[, , 2])
+
+		v <- nrow(B_contrast)  ## number vertices
+		B1_bar <- cbind(rowSums(B1))  ## across-vertex sum of b-coefficients. one per subj.
+		B2_bar <- cbind(rowSums(B2))
+
+		D[, , "multivariate"] <- pdist2(B1, B2) / v
+		D[, , "univariate"] <- pdist2(B1_bar, B2_bar) / v
       
       
-      ##  univariate:
+		## save 
+		
+		p <- arrangeGrob(
+			mikeutils::matplot(D[, , "multivariate"]) + labs(title = "multivariate") + theme(legend.position = "left"),
+			mikeutils::matplot(D[, , "univariate"]) + labs(title = "univariate") + theme(legend.position = "left"),
+			top = parcellation$key[roi_i],
+			nrow = 1
+		)
       
-      B1_bar <- cbind(rowMeans(B1))  ## get means
-      B2_bar <- cbind(rowMeans(B2))
-      
-      D[, , parcel.i, "univariate"] <- pdist2(B1_bar, B2_bar)  / ncol(B1_bar) ## b/c univariate, denominator == 1
-      
-      
-      ## save 
-      
-      
-      p <- arrangeGrob(
-        matplot(D[, , parcel.i, "multivariate"]) + labs(title = "multivariate"),
-        matplot(D[, , parcel.i, "univariate"]) + labs(title = "univariate"),
-        top = parcellation$key[parcel.i],
-        nrow = 1
-      )
-      
-      ggsave(
-        file.path(fig.dir, paste0("euclidean_", suffix, parcellation$key[parcel.i], ".pdf")), 
-        p,
-        width = 14, height = 8, units = "cm",
-        device = "pdf"
-        )
-      
-    }
-    
-    
-    saveRDS(D, file.path(out.dir, paste0("euclidean_",  suffix, name.task.i, "_", name.glm.i, ".RDS")))
-    
-    
-  }
-  
-  
-  NULL
-  
-  
+		ggsave(
+			file.path(fig_dir, paste0("euclidean_", parcellation$key[roi_i], ".pdf")), 
+			p,
+			width = 14, height = 8, units = "cm",
+			device = "pdf"
+			)
+		
+		D
+		
+	}
+	
+	stopCluster(cl)
+	(time.run <- Sys.time() - time.start)
+	
+	
+	## collate and save
+	
+	D <- 
+		array(
+			NA, 
+			dim = c(length(subjs), length(subjs), length(parcellation$key), 2), 
+			dimnames = list(
+				subj_run1 = subjs, subj_run2 = subjs, roi = parcellation$key, type = c("univariate", "multivariate")
+			)
+	)
+	
+	for (roi_i in seq_along(parcellation$key)) D[, , roi_i, ] <- z[[roi_i]]
+
+	saveRDS(D, file.path(out_dir, paste0("euclidean_",  name_task_i, "_", name_glm_i, ".RDS")))
+	
+	
 }
-stopCluster(cl)
-(time.run <- Sys.time() - time.start)
+	
+  
+res <- apply(D, c("roi", "type"), idi)
+
+plot(res)
+abline(0, 1)
 
 
+m <- D[, , 78, 2]
+m_rank <- m
+m_rank[] <- rank(m)
 
+
+m_row <- apply(m, 1, function(x) which.max(x))
+m_col <- apply(m, 2, function(x) which.max(x))
+
+mean(m_row == seq_along(m_row))
+mean(m_col == seq_along(m_col))
+
+
+arrangeGrob(
+			mikeutils::matplot(D[, , 135, "multivariate"]) + labs(title = "multivariate") + theme(legend.position = "left"),
+			mikeutils::matplot(D[, , "univariate"]) + labs(title = "univariate") + theme(legend.position = "left"),
+			top = parcellation$key[roi_i],
+			nrow = 1
+		)
+		
+## network
+## aggregate across tasks*ROIs
+## scale by patterns
+## implement fingerprinting version
+## prewhiten
 

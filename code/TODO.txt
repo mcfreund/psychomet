@@ -1,0 +1,8 @@
+write to _init:
+	write_atlases.R
+		MMP-MD
+		schaefer-network
+		schaefer-parcel
+	write_behav.R
+	write_betas.R
+	...
