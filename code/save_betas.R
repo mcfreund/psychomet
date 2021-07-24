@@ -1,3 +1,5 @@
+## script saves test--restest betas
+
 
 source(here::here("code", "_packages.R"))
 source(here("code", "read-behav.R"))
@@ -14,14 +16,12 @@ source(here("code", "_funs.R"))
 
 dirs <- expand.grid(subj = subjs, task = tasks, session = "baseline", stringsAsFactors = FALSE)
 glminfo <- data.frame(
-  task = "Cuedts",
-  # task = c("Axcpt", "Cuedts", "Stern", "Stroop"),#, "Stroop"),
+  task = c("Axcpt", "Cuedts", "Stern", "Stroop"),
   name.glm = c(
     "baseline_cueletnum_EVENTS_censored_shifted"
-    # "baseline_CongruencySwitch_EVENTS_censored_shifted",
-    # "baseline_ListLength_EVENTS_censored_shifted",
-    # "baseline_Congruency_EVENTS_censored_shifted"
-    # "baseline_fix-item_EVENTS_censored"
+    "baseline_CongruencySwitch_EVENTS_censored_shifted",
+    "baseline_ListLength_EVENTS_censored_shifted",
+    "baseline_Congruency_EVENTS_censored_shifted"
   )
 )
 glminfo <- as.data.table(glminfo)
