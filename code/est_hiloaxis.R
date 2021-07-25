@@ -21,6 +21,7 @@ if (interactive()) {
 
 atlas <- "schaefer"
 do_network <- TRUE
+do_prew <- FALSE
 rois <- split(key_schaefer$parcel, key_schaefer$network)
 
 subjs <- subjs_ub55[!subjs_ub55 %in% "432332"]
@@ -153,7 +154,7 @@ p <-
 
 
 for (subj_i in seq_along(subjs))  {
-  # subj_i = 1
+  # subj_i = which(subjs == "DMCC6418065")
   
   res <- enlist(names(rois))
   
@@ -180,6 +181,7 @@ for (subj_i in seq_along(subjs))  {
   
   noise <- bind_rows(noise, .id = "task")
   
+  
   ## estimate projections:
   
   for (roi_i in seq_along(rois)) {
@@ -198,6 +200,7 @@ for (subj_i in seq_along(subjs))  {
     
     W <- setNames(noise$invcov[noise$roi == name_roi_i], noise$task[noise$roi == name_roi_i])
     good_verts <- Reduce(intersect, lapply(W, function(x) attr(x, "which.vert")))
+    if (is.null(good_verts)) next
     W <- lapply(W, get_good_verts, vert_names_keep = as.character(good_verts))
     
     U <- B_roi_i[good_verts, , ]  ## pattern matrix
@@ -208,10 +211,10 @@ for (subj_i in seq_along(subjs))  {
     ## prewhiten each axes per task
     
     U_w <- U
-    for (task_i in seq_along(tasks)) {
-      # task_i = 1
-      U_w[, task_i, ] <- crossprod(W[[task_i]], U[, task_i, ])
+    if (do_prew) {
+      for (task_i in seq_along(tasks)) U_w[, task_i, ] <- crossprod(W[[task_i]], U[, task_i, ])
     }
+    
     
     # par(mfrow = c(1, 2))
     # image(cor(U))
@@ -260,7 +263,7 @@ saveRDS(
     paste0(
       "hiloaxis-projections", 
       "_parc-schaefer07",
-      "_prew-concat-runs",
+      "_prew-", switch(do_prew + 1, "none", "concat-runs"),
       "_stand-axes",
       ".RDS"
       )
