@@ -18,21 +18,26 @@ key_mmp <- data.table::fread(here::here("in", "atlas-key_mmp.csv"))
 
 ## read voxel-wise giftis ----
 
-schaefer10k <-
-  c(
-    gifti::read_gifti(file.path(dir_atlas, "Schaefer2018_400Parcels_7Networks_order_10K_L.label.gii"))$data[[1]],
-    gifti::read_gifti(file.path(dir_atlas, "Schaefer2018_400Parcels_7Networks_order_10K_R.label.gii"))$data[[1]] + 200
-  )
+if (Sys.info()["nodename"] == "ccplinux1") {
+  
+  schaefer10k <-
+    c(
+      gifti::read_gifti(file.path(dir_atlas, "Schaefer2018_400Parcels_7Networks_order_10K_L.label.gii"))$data[[1]],
+      gifti::read_gifti(file.path(dir_atlas, "Schaefer2018_400Parcels_7Networks_order_10K_R.label.gii"))$data[[1]] + 200
+    )
+  
+  mmp10k <-
+    c(
+      gifti::read_gifti(
+        file.path(dir_atlas, "HCP-MMP_RelatedParcellation210.CorticalAreas_dil_Colors.32k_fs_LR_L.label.gii")
+        )$data[[1]],
+      gifti::read_gifti(
+        file.path(dir_atlas, "HCP-MMP_RelatedParcellation210.CorticalAreas_dil_Colors.32k_fs_LR_R.label.gii")
+        )$data[[1]]
+    )
 
-mmp10k <-
-  c(
-    gifti::read_gifti(
-      file.path(dir_atlas, "HCP-MMP_RelatedParcellation210.CorticalAreas_dil_Colors.32k_fs_LR_L.label.gii")
-      )$data[[1]],
-    gifti::read_gifti(
-      file.path(dir_atlas, "HCP-MMP_RelatedParcellation210.CorticalAreas_dil_Colors.32k_fs_LR_R.label.gii")
-      )$data[[1]]
-  )
+}
+
   
 
 
