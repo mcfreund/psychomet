@@ -1,0 +1,186 @@
+---
+title: "ICC: cross-run (split-half), ub55, cross-task projection onto hilo axis"
+output:
+  html_document:
+    toc: true
+    toc_depth: 3
+    number_sections: true
+
+---
+
+
+# intro
+
+
+```{r setup, include = FALSE}
+
+library(here)
+library(here)
+library(tidyr)
+library(dplyr)
+library(data.table)
+library(abind)
+library(doParallel)
+library(foreach)
+library(mikeutils)
+library(progress)
+library(ggplot2)
+library(grid)
+library(gridExtra)
+library(cowplot)
+library(viridis)
+
+theme_set(theme_half_open())
+
+source(here("code", "_constants.R"))
+source(here("code", "_atlases.R"))
+source(here("code", "_funs.R"))
+
+
+# do.network <- TRUE
+# glminfo <- data.frame(
+#   task = c("Axcpt", "Cuedts", "Stern", "Stroop"),
+#   name.glm = c(
+#     "baseline_aggressive1_EVENTS_censored_shifted"
+#   ),
+#   stringsAsFactors = FALSE
+# )
+# glminfo <- as.data.table(glminfo)
+# 
+# 
+# taskruns <- sort(combo_paste(tasks, c("run1", "run2")))
+
+
+projs <- readRDS(
+  here(
+    "out", "icc", 
+    paste0(
+      "hiloaxis-projections", 
+      "_parc-schaefer07",
+      "_prew-concat-runs",
+      "_stand-axes",
+      ".RDS"
+      )
+    )
+  )
+
+d <- data.table(reshape2::melt(projs))
+
+d <- d %>% filter(!is.na(value))
+
+d %<>%
+  group_by(task, parcel, run) %>%
+  mutate(d = value / sd(value))
+
+```
+
+
+# quick look
+
+```{r}
+
+d %>%
+  
+  ggplot(aes(value)) +
+  geom_histogram()
+
+
+d %>%
+  
+  ggplot(aes(d)) +
+  geom_histogram()
+
+
+d %>%
+  
+  ggplot(aes(d)) +
+  geom_histogram() +
+  facet_grid(vars(parcel), vars(task))
+  
+
+```
+
+
+# group-level effects
+
+Are projections generally positive across subjs?
+That is, was "hi" vs "lo" successfully decoded?
+
+
+```{r}
+
+d %>%
+  
+  ggplot(aes(run, d, fill = run)) +
+  geom_hline(yintercept = 0) +
+  
+  stat_summary(fun = "mean", geom = "col") +
+  stat_summary(fun.data = "mean_cl_boot", geom = "errorbar", width = 0, size = 1.5) +
+  
+  facet_grid(vars(task), vars(parcel)) +
+  scale_fill_brewer(type = "qual", palette = 6) +
+  theme(legend.position = "none") +
+  
+  labs(
+    y = "mean cross-task projection on hi-lo axis\n(cohen's D)",
+    x = "scanning run",
+    caption = "error bars: 95% CI (bootstrapped)"
+  )
+
+
+sum_stats <- d %>%
+  
+  group_by(task, parcel) %>%
+  summarize(
+    statistic = t.test(d)$statistic,
+    p = t.test(d)$p.value
+  )
+
+sum_stats %>% filter(p < 0.001)
+
+```
+
+
+
+# individual effects
+
+Is an individual's projection generally stable across scanning runs of the same task?
+That is, what is the split-half reliability of "hi" vs "lo" multivariate contrast?
+
+
+```{r}
+
+d_w <- d %>% 
+  pivot_wider(id_cols = c("task", "parcel", "subj"), names_from = "run", values_from = "d")
+  
+d_w %>%
+  
+  ggplot(aes(run1, run2)) +
+  geom_abline() +
+  
+  geom_point(shape = 21, color = "white", fill = "black", size = 3) +
+  
+  facet_grid(vars(task), vars(parcel)) +
+  
+  labs(
+    x = "run 1 cross-task projection on hi-lo axis\n(cohen's D)",
+    y = "run 2 cross-task projection on hi-lo axis\n(cohen's D)",
+    caption = "error bars: 95% CI (bootstrapped)"
+  )
+
+
+sum_stats_indiv <- d_w %>%
+  
+  group_by(task, parcel) %>%
+  summarize(
+    r = cor(run1, run2),
+    rho = cor(run1, run2, method = "spearman")
+  )
+
+sum_stats_indiv %>% arrange(-r)
+
+sum_stats %>% filter(p < 0.001)
+
+```
+
+
