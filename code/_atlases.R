@@ -1,50 +1,75 @@
+## NB: assumes atlases located in path specified by dir_atlas variable
+
 
 ## get paths if haven't already:
-if (!(exists("dir_schaefer") | !exists("dir_mmp"))) source(here("code", "_constants.R"))
+if (!exists("dir_atlas")) source(here::here("code", "_constants.R"))
 
 
+## read atlas keys ----
 
-# parcellation <- mikeutils::read_atlas("schaefer400", path.atlas = dir_schaefer)
+not_exist_keys <- 
+  !file.exists(here::here("in", "atlas-key_schaefer400-07.csv")) | 
+  !file.exists(here::here("in", "atlas-key_mmp.csv"))
+if (not_exist_keys) stop("need to write atlas keys. run:\n  source(here::here('in', '_write_atlas_keys.R'))")
 
-## if need to write atlas info to ./in dir...
+key_schaefer <- data.table::fread(here::here("in", "atlas-key_schaefer400-07.csv"))
+key_mmp <- data.table::fread(here::here("in", "atlas-key_mmp.csv"))
 
-if (nodename == "ccplinux1") {
+
+## read voxel-wise giftis ----
+
+schaefer10k <-
+  c(
+    gifti::read_gifti(file.path(dir_atlas, "Schaefer2018_400Parcels_7Networks_order_10K_L.label.gii"))$data[[1]],
+    gifti::read_gifti(file.path(dir_atlas, "Schaefer2018_400Parcels_7Networks_order_10K_R.label.gii"))$data[[1]] + 200
+  )
+
+mmp10k <-
+  c(
+    gifti::read_gifti(
+      file.path(dir_atlas, "HCP-MMP_RelatedParcellation210.CorticalAreas_dil_Colors.32k_fs_LR_L.label.gii")
+      )$data[[1]],
+    gifti::read_gifti(
+      file.path(dir_atlas, "HCP-MMP_RelatedParcellation210.CorticalAreas_dil_Colors.32k_fs_LR_R.label.gii")
+      )$data[[1]]
+  )
   
-  
-  
-}
 
-fname.atlas <- file.path(
-  path.atlas,
-  "Schaefer2018_Parcellations", "HCP", "fslr32k", "cifti", "Schaefer2018_400Parcels_7Networks_order_info.txt"
+
+## ROIs
+
+
+## DMCC conjunction (baseline test) --- schaefer atlas:
+dmcc34 <- c(
+  22, 77, 78, 86, 87, 91, 93, 99, 101, 103, 105, 107, 110, 127, 130, 139, 140,
+  144, 148, 172, 175, 185, 189, 219, 301, 303, 306, 314, 340, 346, 347, 349, 350, 353
 )
-if (file.exists(fname.atlas)) {
-  fin <- file(fname.atlas, 'rt')
-  tmp <- readLines(fin);
-  close(fin); unlink(fin);
-  if (length(tmp) != 800) { stop("not expected Schaefer key."); }
-  tmp <- tmp[seq(from=1, to=800, by=2)];   # every-other entry is a label
-  atlas.key <- gsub("7Networks_", "", tmp);
-}
+
+## MD [from assem (2020); cereb cort.] --- mmp atlas:
+
+md_core_names <- mikeutils::combo_paste(
+  c("p9-46v", "a9-46v", "i6-8", "AVI", "8C", "IFJp", "IP2", "IP1", "PFm", "8BM", "SCEF"),
+  c("L", "R")
+)
 
 
-## voxel-wise giftis
+md_core <- match(md_core_names, key_mmp$parcel)
+names(md_core) <- md_core_names
+md_core <- sort(md_core)
+rm(md_core_names)
 
-if (nodename %in% c("ccplinux1", "PUTER")) {
-  
-  schaefer10k <-
-    c(
-      gifti::read_gifti(file.path(dir_schaefer, "Schaefer2018_400Parcels_7Networks_order_10K_L.label.gii"))$data[[1]],
-      gifti::read_gifti(file.path(dir_schaefer, "Schaefer2018_400Parcels_7Networks_order_10K_R.label.gii"))$data[[1]] + 200
-    )
-  
-  mmp10k <-
-    c(
-      gifti::read_gifti(file.path(dir_mmp, "HCP-MMP_RelatedParcellation210.CorticalAreas_dil_Colors.32k_fs_LR_L.label.gii"))$data[[1]],
-      gifti::read_gifti(file.path(dir_mmp, "HCP-MMP_RelatedParcellation210.CorticalAreas_dil_Colors.32k_fs_LR_R.label.gii"))$data[[1]]
-    )
-  
-  
-}
+md_extended_names <- mikeutils::combo_paste(
+  c(
+    "a9-46v", "p10p", "a10p", "11l", "a47r", "p47r", "FOP5", "AVI", "p9-46v", "8C", "IFJp", "6r", 
+    "s6-8", "i6-8", "SCEF", "8BM", "a32pr", "d32", "TE1m", "TE1p", "AIP", "IP2", "LIPd", "MIP", 
+    "IP1", "PGs", "PFm", "POS2"
+  ),
+  c("L", "R")
+)
+md_extended <- match(md_extended_names, key_mmp$parcel)
+names(md_extended) <- md_extended_names
+md_extended <- sort(md_extended)
+rm(md_extended_names)
 
-## 
+
+

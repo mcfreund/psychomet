@@ -52,17 +52,15 @@ n_trs <- c(
 )
 
 tasks <- c("Axcpt", "Cuedts", "Stern", "Stroop")
+taskruns <- sort(combo_paste(tasks, c("run1", "run2")))
+
 
 subjs_ub55 <- data.table::fread(here::here("..", "ub55", "in", "ub55_subjects.txt"))[[1]]
 subjs_test <- c()
 subjs_retest <- c()
 
 
-
-dmcc34 <- c(
-  22, 77, 78, 86, 87, 91, 93, 99, 101, 103, 105, 107, 110, 127, 130, 139, 140,
-  144, 148, 172, 175, 185, 189, 219, 301, 303, 306, 314, 340, 346, 347, 349, 350, 353
-)
+## TRs of interest
 
 ## old:
 # target_trs <- list(
@@ -71,6 +69,13 @@ dmcc34 <- c(
 #   Stern = 11:12,
 #   Stroop = 2:4
 # )
+# cue_trs <- list(
+#   Axcpt = 8:9,  ### ????
+#   Cuedts = 9:10, ### ????
+#   Stern = 7:8,
+#   Stroop = 2:4
+# )
+
 
 ## from jo:
 # Axcpt: Cues, BX high, BY low. 17, 8:10
@@ -84,12 +89,3 @@ target_trs <- list(
   Stern = 12:14,
   Stroop = 3:5
 )
-
-
-cue_trs <- list(
-  Axcpt = 8:9,  ### ????
-  Cuedts = 9:10, ### ????
-  Stern = 7:8,
-  Stroop = 2:4
-)
-

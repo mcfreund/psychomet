@@ -42,3 +42,5 @@ idi <- function(x) {
   mean(offdiag) - mean(diagonal)
   
 }
+
+
