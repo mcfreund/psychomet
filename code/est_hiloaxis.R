@@ -1,53 +1,64 @@
-if (interactive()) {
-  
-  library(here)
-  library(here)
-  library(dplyr)
-  library(data.table)
-  library(abind)
-  library(doParallel)
-  library(foreach)
-  library(mikeutils)
-  library(progress)
-  
-  source(here("code", "_constants.R"))
-  source(here("code", "_atlases.R"))
-  source(here("code", "_funs.R"))
-  
+## TODO
+##-  optwt
+##- prew run-specific: examine cross-run, w/n task reliability in pattern after prewhitening... (other script)
+## prew: diagonal only
+
+if (FALSE) {
+	## mostly for debugging purposes
+	
+	library(here)
+	library(here)
+	library(dplyr)
+	library(data.table)
+	library(abind)
+	library(doParallel)
+	library(foreach)
+	library(mikeutils)
+	library(progress)
+
+	source(here("code", "_constants.R"))
+	source(here("code", "_atlases.R"))
+	source(here("code", "_funs.R"))
+
+
+	## input vars ----
+
+	atlas <- "schaefer"
+	do_network <- TRUE
+	do_prew <- TRUE
+	prewtype <- "multi"  ## "univ", "multi"
+	do_stand <- TRUE
+	do_optwt <- FALSE
+	do_wthntsk <- TRUE
+
+	rois <- split(key_schaefer$parcel, key_schaefer$network)
+
+	subjs <- subjs_ub55[!subjs_ub55 %in% "432332"]
+
+	glminfo <- data.table(
+	  task = c("Axcpt", "Cuedts", "Stern", "Stroop"),
+	  name_glm = c(
+		"baseline_Cues_EVENTS_censored_shifted",
+		"baseline_CongruencySwitch_EVENTS_censored_shifted",
+		"baseline_ListLength_EVENTS_censored_shifted",
+		"baseline_Congruency_EVENTS_censored_shifted"
+	  )
+	)
+
+	hi = list(
+	  Axcpt = "BX",
+	  Cuedts = c("InConInc", "InConNoInc"),
+	  Stern = "LL5RN",
+	  Stroop = "biasInCon"
+	)
+	lo = list(
+	  Axcpt = "BY",
+	  Cuedts = c("ConInc", "ConNoInc"),
+	  Stern = "LL5NN",
+	  Stroop = "biasCon"
+	)
+
 }
-
-
-## input vars ----
-
-atlas <- "schaefer"
-do_network <- TRUE
-do_prew <- FALSE
-rois <- split(key_schaefer$parcel, key_schaefer$network)
-
-subjs <- subjs_ub55[!subjs_ub55 %in% "432332"]
-
-glminfo <- data.table(
-  task = c("Axcpt", "Cuedts", "Stern", "Stroop"),
-  name_glm = c(
-    "baseline_Cues_EVENTS_censored_shifted",
-    "baseline_CongruencySwitch_EVENTS_censored_shifted",
-    "baseline_ListLength_EVENTS_censored_shifted",
-    "baseline_Congruency_EVENTS_censored_shifted"
-  )
-)
-
-hi = list(
-  Axcpt = "BX",
-  Cuedts = c("InConInc", "InConNoInc"),
-  Stern = "LL5RN",
-  Stroop = "biasInCon"
-)
-lo = list(
-  Axcpt = "BY",
-  Cuedts = c("ConInc", "ConNoInc"),
-  Stern = "LL5NN",
-  Stroop = "biasCon"
-)
 
 
 
@@ -139,25 +150,46 @@ for (glm_i in seq_len(nrow(glminfo))) {
 
 
 
+
+
+
+
 ## estimate projections ----
 
 
-p <- 
-  array(
-    NA,
-    dim = c(length(tasks), length(rois), length(subjs), 2),
-    dimnames = list(
-      task = tasks, parcel = names(rois), 
-      subj = subjs, run = c("run1", "run2")
-      )
-  )
+cl <- makeCluster(n_cores / 2)
+registerDoParallel(cl)
 
-
-for (subj_i in seq_along(subjs))  {
+res <- foreach(
+  subj_i = seq_along(subjs),
+  .final = function(x) setNames(x, subjs),
+  #.verbose = TRUE,
+  .packages = c("here", "dplyr", "mikeutils")
+  ) %dopar% {
+  # subj.i = 43
+#for (subj_i in seq_along(subjs))  {
   # subj_i = which(subjs == "DMCC6418065")
+ 
   
-  res <- enlist(names(rois))
+	p <- array(
+		NA,
+		dim = c(length(tasks), length(rois), 2),
+		dimnames = list(
+		  task = tasks, roi = names(rois), 
+		  run = c("run1", "run2")
+		  )
+	)
   
+	rho <- 
+	  array(
+		NA,
+		dim = c(length(tasks), length(rois), 2),
+		dimnames = list(
+		  task = tasks, roi = names(rois), 
+		  method = c("prewhitened", "vanilla")
+		)
+	  ) 
+    
   name_subj_i <- subjs[subj_i]
   B_subj_i <- B[, subj_i, , ]
   
@@ -204,29 +236,65 @@ for (subj_i in seq_along(subjs))  {
     W <- lapply(W, get_good_verts, vert_names_keep = as.character(good_verts))
     
     U <- B_roi_i[good_verts, , ]  ## pattern matrix
-    U <- apply(U, 2:3, scale)  ## z-score standardize patterns per task*run
+    if (do_stand) U <- apply(U, 2:3, scale)  ## z-score standardize patterns per task*run
     # U <- U / sqrt(nrow(U))  ## scale by number of vertices (for comparability across ROIs)
     
     
     ## prewhiten each axes per task
-    
+	
     U_w <- U
-    if (do_prew) {
-      for (task_i in seq_along(tasks)) U_w[, task_i, ] <- crossprod(W[[task_i]], U[, task_i, ])
-    }
-    
-    
-    # par(mfrow = c(1, 2))
-    # image(cor(U))
-    # image(cor(U_w))
-    
+	if (do_prew) {
+		if (prewtype %in% c("multi", "univ")) {
+			if (prewtype == "univ") {  ## set off-diagonal to zero
+				for (task_i in seq_along(tasks)) W[[task_i]][row(W[[task_i]]) != col(W[[task_i]])] <- 0
+			}
+			for (task_i in seq_along(tasks)) U_w[, task_i, ] <- crossprod(W[[task_i]], U[, task_i, ])
+		}
+	}
+	
+    #par(mfrow = c(1, 2))
+    #image(cor(U))
+    #image(cor(U_w))
+    #cor(U_w[, , 1], U[, , 1])
     
     ## reshape to 2D array:
-    U_w <- U_w
+    
+	U_w <- U_w
     dim(U_w) <- c(nrow(U_w), length(tasks)*2)  ## concatenate runs columnwise
     colnames(U_w) <- combo_paste(tasks, c("run1", "run2"))
     U_w <- U_w[, taskruns]
     
+	
+    if (do_optwt) {
+      ## TODO:
+      ## create convex combination for each task / hold-out fold, to use as weighting for "training".
+      
+      r <- 
+        cbind(
+          cor(U_w[, "Axcpt_run1"], U_w[, "Axcpt_run2"]),
+          cor(U_w[, "Cuedts_run1"], U_w[, "Cuedts_run2"]),
+          cor(U_w[, "Stern_run1"], U_w[, "Stern_run2"]),
+          cor(U_w[, "Stroop_run1"], U_w[, "Stroop_run2"])
+        )
+      r[r<0] <- 0
+      
+      avg[] <- 0
+      for (task_i in seq_along(tasks)) {  ## hold-out task (test)
+        lambda <- r[-task_i] / sum(r[-task_i])
+        names(lambda) <- tasks[-task_i]
+        for (task_j in tasks[-task_i]) {  ## training task
+          avg[grep(task_j, rownames(avg)), task_i] <- lambda[task_j] / 2
+        }
+      }
+	  
+      if (any(is.nan(avg))) print(paste0(subjs[subj_i], " ", names(rois)[roi_i], "\n"))
+	  #stop("bad combo.")
+      
+    }
+    
+    
+	## cross-task projections ----
+	
     ## train (get axes):
     
     a <- U_w %*% avg  ## hi-lo axes
@@ -241,16 +309,63 @@ for (subj_i in seq_along(subjs))  {
       u_i <- U[, task_i, ]
       
       ## divide by number of vertices for comparison across ROIs:
-      p[task_i, roi_i, subj_i, ] <- crossprod(a_i, u_i) / nrow(U)
+      p[task_i, roi_i, ] <- crossprod(a_i, u_i) / nrow(U)
       
     }
-
+	
+	
+	## cross-run projections (within task) ----
+	
+	## projection instead of corrleation because sqrtm takes time and apparently prewhitening
+	## not commutative with correlation
+	## scale 
+    if (do_wthntsk) {
+		
+		for (task_i in seq_along(tasks)) {
+		  
+		  u_i <- U[, task_i, ]
+		  uw_i <- U_w[, grep(tasks[task_i], colnames(U_w))]
+		  
+		  #crossprod(uw_i[, 1], scale2unit(u_i[, 2]))  ## should realy be using proj instead, but...
+		  r_wthntsk <- cor(uw_i, u_i)
+		  r_wthntsk <- tanh(mean(atanh(r_wthntsk[row(r_wthntsk) != col(r_wthntsk)])))
+		  r_wthntsk_vanil <- cor(u_i)[1, 2]
+		  
+		  ## divide by number of vertices for comparison across ROIs:
+		  rho[task_i, roi_i, ] <- c(r_wthntsk, r_wthntsk_vanil)
+		  
+		}
+	}
+	
   }
   
-  pb$tick()  ## progress bar
+  #pb$tick()  ## progress bar
+	if (do_wthntsk) {
+		
+		list(crstsk = p, wthntsk = rho)
+
+	} else {
+		
+		list(crstsk = p)
+		
+	}
   
 }
+stopCluster(cl)
 
+
+
+
+## wrangle results ----
+
+p <- lapply(res, function(x) x[["crstsk"]]) %>% list2array("subj")
+#p <- array(
+#	NA,
+#	dim = c(dim(crstsk[[1]]), length(subjs)),
+#	dimnames = c(dimnames(crstsk[[1]]), subj = list(subjs))
+#)
+#for (subj_i in seq_along(subjs)) p[, , , subjs[subj_i]] <- crstsk[[subjs[subj_i]]]
+if (do_wthntsk) r <- lapply(res, function(x) x[["wthntsk"]]) %>% list2array("subj")
 
 
 ## save ----
@@ -263,9 +378,31 @@ saveRDS(
     paste0(
       "hiloaxis-projections", 
       "_parc-schaefer07",
-      "_prew-", switch(do_prew + 1, "none", "concat-runs"),
-      "_stand-axes",
+      "_prew-", switch(do_prew + 1, "none", paste0("concat-runs-", prewtype)),
+	  "_stand-", switch(do_stand + 1, "none", "axes"),
+      "_cvweight-", switch(do_optwt + 1, "unif", "opt"),
       ".RDS"
       )
     )
   )
+
+
+if (do_wthntsk) {
+
+	saveRDS(
+	  r, 
+	  here(
+		"out", "icc", 
+		paste0(
+		  "hiloaxis-projections-wthntsk", 
+		  "_parc-schaefer07",
+		  "_prew-", switch(do_prew + 1, "none", paste0("concat-runs-", prewtype)),
+		  "_stand-", switch(do_stand + 1, "none", "axes"),
+		  ".RDS"
+		  )
+		)
+	  )
+	
+}
+
+print("done")
