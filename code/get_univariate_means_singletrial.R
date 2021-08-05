@@ -43,15 +43,32 @@ for (subj_i in seq_along(subjs)) {
     which_parcels <- match(rois[[roi_i]], key_schaefer$parcel)  ## works with both network and parcel level
     is_roi <- schaefer10k %in% which_parcels
     
-    resids_roi_i <- lapply(
-      resids, 
-      function(x) {
-        x <- x[, is_roi, ]
-        names(dimnames(x)) <- c("trial", "vertex", "run") 
-        x <- aperm(x, c("trial", "run", "vertex"))
-        rowMeans(x, dims = 2)
-      }
-    )
+    
+    for (task_i in seq_along(resids)) {
+      
+      resids_roi_i <- lapply(
+        resids, 
+        function(x) {
+          
+          x <- resids[, is_roi, ]
+          names(dimnames(x)) <- c("trial", "vertex", "run") 
+          
+          aperm(x, c("trial", "run", "vertex"))
+          
+        }
+      )
+      
+      resids_roi_i <- lapply(resids_roi_i, rowMeans, dims = 2)
+      
+      
+      
+    }
+    
+    
+    
+    
+    resids_roi_i
+    
     
     resids_roi_i <- lapply(resids_roi_i, function(x) as.data.table(reshape2::melt(x))) %>% rbindlist(idcol = "task")
     

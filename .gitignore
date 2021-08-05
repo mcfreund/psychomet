@@ -40,3 +40,4 @@ vignettes/*.pdf
 
 /out/runwise/wb/*
 /out/runwise/figs/*
+.Rproj.user
