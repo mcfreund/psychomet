@@ -36,43 +36,201 @@ source(here("code", "_constants.R"))
 source(here("code", "_atlases.R"))
 source(here("code", "_funs.R"))
 
-
-# do.network <- TRUE
-# glminfo <- data.frame(
-#   task = c("Axcpt", "Cuedts", "Stern", "Stroop"),
-#   name.glm = c(
-#     "baseline_aggressive1_EVENTS_censored_shifted"
-#   ),
-#   stringsAsFactors = FALSE
-# )
-# glminfo <- as.data.table(glminfo)
-# 
-# 
-# taskruns <- sort(combo_paste(tasks, c("run1", "run2")))
-
-
-projs <- readRDS(
-  here(
-    "out", "icc", 
-    paste0(
-      "hiloaxis-projections", 
-      "_parc-schaefer07",
-      "_prew-concat-runs",
-      "_stand-axes",
-      ".RDS"
-      )
-    )
-  )
-
-d <- data.table(reshape2::melt(projs))
+fnames <- list.files(here("out", "icc"), full.names = TRUE)
+projs <- setNames(lapply(fnames, readRDS), list.files(here("out", "icc")))
+projs <- lapply(projs, reshape::melt) %>% lapply(data.table)
+d <- rbindlist(projs, fill = TRUE, idcol = "file")
 
 d <- d %>% filter(!is.na(value))
 
-d %<>%
-  group_by(task, parcel, run) %>%
-  mutate(d = value / sd(value))
 
 ```
+
+
+
+# within-task projections
+
+```{r}
+
+d_wthn <- d %>% 
+  
+  filter(grepl("wthntsk_parc", file)) %>% 
+  select(-run) %>%
+  mutate(
+    file = gsub("hiloaxis-projections-wthntsk_parc-schaefer07_prew-concat-runs-|.RDS", "", file),
+    standardized = grepl("axes", file)
+  )
+
+d_wthn <- bind_rows(
+  
+  d_wthn %>%
+    filter(method == "prewhitened") %>%
+    mutate(prewhitened = substr(file, 1, 4)),
+  
+  d_wthn %>%
+    filter(method == "vanilla", grepl("multi", file)) %>%
+    mutate(prewhitened = "none")
+  
+  ) %>% select(-file, -method)
+
+
+d_wthn %>%
+  
+  filter(standardized, prewhitened %in% c("none", "univ")) %>%
+  
+  group_by(standardized, prewhitened, task, roi) %>%
+  mutate(value = value / sd(value)) %>%
+
+  ggplot(aes(prewhitened, value, fill = prewhitened)) +
+  geom_hline(yintercept = 0) +
+  
+  stat_summary(fun = "mean", geom = "col", position = position_dodge(width = 1)) +
+  stat_summary(
+    fun.data = "mean_cl_boot", geom = "errorbar", width = 0, size = 1.5,
+    position = position_dodge(width = 1)
+    ) +
+  
+  facet_grid(vars(task), vars(roi)) +
+  scale_fill_brewer(type = "qual", palette = 6)
+
+## prewhitening seems to reduce variability across-the-board (all tasks)
+## massive increases in CTS and Stern.... (and increase raw mean effect, too...)
+## axcpt and stroop, much less strong of impact, but seems to generally increase std ES
+## really not sure what's going on with CTS and Sternberg.
+## should investigate noise model GLM and noise model code more...
+
+
+d_sum <-
+  d_wthn %>%
+  
+  filter(standardized) %>%
+
+  pivot_wider(
+    id_cols = c("standardized", "subj", "roi", "prewhitened"), 
+    names_from = "task", values_from = "value"
+    ) %>%
+  group_by(standardized, prewhitened, roi) %>%
+  
+  summarize(
+    r_axcpt_cuedts = cor(Axcpt, Cuedts),
+    r_axcpt_stern = cor(Axcpt, Stern),
+    r_axcpt_stroop = cor(Axcpt, Stroop),
+    r_cuedts_stern = cor(Cuedts, Stern),
+    r_cuedts_stroop = cor(Cuedts, Stroop),
+    r_stern_stroop = cor(Stern, Stroop)
+    ) %>%
+    
+    View
+
+
+```
+
+
+
+# between-task
+
+## cross-run correlation (reliability)
+
+```{r}
+
+r <-
+  d %>%
+  
+  filter(!grepl("wthntsk", file)) %>%
+  pivot_wider(id_cols = c("subj", "roi", "task", "file"), names_from = "run", values_from = "value") %>%
+  
+  group_by(roi, task, file) %>%
+  summarize(r = cor(run1, run2))
+
+
+r %>%
+  
+  filter(grepl("means|stand-axes_cvweight-unif", file)) %>%
+  
+  ggplot(aes(file, r, fill = file)) +
+  geom_hline(yintercept = 0) +
+  
+  geom_col(position = position_dodge(width = 1)) +
+
+  facet_grid(vars(task), cols = vars(roi)) +
+  scale_fill_brewer(type = "qual", palette = 6) +
+  theme(axis.text.x = element_blank()) +
+  
+  labs(title = "cross-run correlation")
+
+
+## univariate noise norm and non-prewhitened seem to have best reliability
+## max is 0.5 (axcpt, control network)
+## univariate mean quite poor reliability -- max ~ 0.2
+
+
+```
+
+
+# group-level effects
+
+```{r}
+
+
+d %>%
+  
+  filter(grepl("means|none_stand-axes_cvweight-unif|univ_stand-axes_cvweight-unif", file)) %>%
+  
+  group_by(file, task, roi, method, subj) %>%
+  summarize(value = mean(value)) %>%  ## average across runs
+  mutate(
+    value = value / sd(value),
+    file = gsub("hiloaxis-projections_parc-schaefer07_prew-|.RDS", "", file)
+    ) %>%
+  
+  ggplot(aes(file, value, fill = file)) +
+  geom_hline(yintercept = 0) +
+  
+  stat_summary(fun = "mean", geom = "col", position = position_dodge(width = 1)) +
+  stat_summary(
+    fun.data = "mean_cl_boot", geom = "errorbar", width = 0, size = 1.5,
+    position = position_dodge(width = 1)
+    ) +
+  
+  facet_grid(vars(task), vars(roi)) +
+  scale_fill_brewer(type = "qual", palette = 6) +
+  theme(axis.text.x = element_blank())
+
+
+## univ and no-prewhitening have comparable impact on group-level effect size for cross-task axis.
+
+
+# d %>%
+#   
+#   filter(grepl("means|none_stand-axes_cvweight-unif", file)) %>%  
+#   
+#   group_by(file, task, roi, method, subj) %>%
+#   summarize(value = mean(value)) %>%
+#   mutate(
+#     # value = value / sd(value),
+#     file = gsub("hiloaxis-projections_parc-schaefer07_prew-|.RDS", "", file)
+#     ) %>%
+#   
+#   pivot_wider(id_cols = c("subj", "file", "task"), names_from = "roi", values_from = "value") %>%
+#   group_by(file, task) %>%
+#   
+#   filter(
+#     grepl("univ_stand-axes_cvweight-unif", file), task == "Stroop"
+#   ) %>%
+#   ungroup %>%
+#   select(Cont:Vis)  %>%
+#   cor %>%
+#   matplot + 
+#   theme(legend.position = "top", axis.text = element_text()) + 
+#   geom_text(aes(label = round(value, 1)), color = "grey20") +
+#   scale_fill_continuous(limits = c(0, 1))
+# 
+# 
+
+
+
+```
+
 
 
 # quick look
@@ -178,8 +336,6 @@ sum_stats_indiv <- d_w %>%
   )
 
 sum_stats_indiv %>% arrange(-r)
-
-sum_stats %>% filter(p < 0.001)
 
 ```
 
