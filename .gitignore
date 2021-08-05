@@ -40,3 +40,6 @@ vignettes/*.pdf
 
 /out/runwise/wb/*
 /out/runwise/figs/*
+
+docs/
+out/icc/projs*
