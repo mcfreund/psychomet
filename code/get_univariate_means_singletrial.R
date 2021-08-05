@@ -43,6 +43,7 @@ for (subj_i in seq_along(subjs)) {
     which_parcels <- match(rois[[roi_i]], key_schaefer$parcel)  ## works with both network and parcel level
     is_roi <- schaefer10k %in% which_parcels
     
+ 
     resids_roi_i <- lapply(
       resids, 
       function(x) {

@@ -40,6 +40,10 @@ vignettes/*.pdf
 
 /out/runwise/wb/*
 /out/runwise/figs/*
+<<<<<<< HEAD
+.Rproj.user
+=======
 
 docs/
 out/icc/projs*
+>>>>>>> bf6911cd04358f97dd672ce7f9b2fc633095a44e
