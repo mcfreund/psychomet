@@ -14,6 +14,8 @@ output:
 
 ```{r setup, include = FALSE}
 
+## basics ----
+
 library(here)
 library(here)
 library(tidyr)
@@ -50,81 +52,154 @@ fnames <- c(
 cols <- c("subj", "task", "run", "trial.num", "trial.type", "acc")
 trialinfo <- behav %>% map(~ select(.x, all_of(cols))) %>% rbindlist
 
+## TODO:
+##  - edit trialinfo so that displays
+
 hi <- c("BX", "InCon", "RN")
 lo <- c("BY", "Con", "NN")
+
+
+
+## functions ----
+
+
+get_trial_data <- function(name) {
+  
+  d <- readRDS(fnames[name])
+  d <- rename(d, trial.num = trial)
+  d <- merge(d, trialinfo, by = c("subj", "task", "run", "trial.num"))  ## bind just enough info
+  ## TOD add error checking for expansion --- mismatched trials
+  
+}
+
+
+get_ons <- function(d) {
+  
+  ## get 'ons' per task:
+  
+  d <- d[!is.na(value)]
+  d_subj <- d[, .(value = mean(value)), by = c("subj", "task", "roi")]  ## aggregate
+
+  rename(d_subj, on = value)
+  
+}
+
+
+get_hilo <- function(d) {
+  
+  ## get hilo per task:
+  
+  d <- d[!is.na(value)]
+  d$hilo <- as.character(NA)
+  d[trial.type %in% hi]$hilo <- "hi"
+  d[trial.type %in% lo]$hilo <- "lo"
+  
+  d_subj <- 
+    d[hilo %in% c("hi", "lo"), .(value = mean(value)), by = c("subj", "task", "roi", "hilo")]  ## aggregate
+  d_subj <- dcast(d_subj, subj + task + roi ~ hilo)  ## to wide
+  d_subj[, hi_v_lo := hi - lo]  ## get contrast
+  
+  d_subj
+  
+}
+
+
+
 
 ```
 
 
-# errts
+# 'ONs'
+
 
 
 ```{r}
 
-## network ----
 
-d_network_errts <- readRDS(fnames["network_errts"])
-d_network_errts %<>% rename(trial.num = trial)
-d_network_errts %<>% merge(trialinfo, by = c("subj", "task", "run", "trial.num"))  ## bind just enough info
+# ## network ----
 
-## get hilo per task:
+d_subj_netw <- get_trial_data("network_errts") %>% get_ons
 
-# table(d_network_errts[is.na(value)]$subj, d_network_errts[is.na(value)]$task)
-# table(d_network_errts[!is.na(value)]$subj, d_network_errts[!is.na(value)]$task)
-
-d_network_errts <- d_network_errts[!is.na(value)]
-d_network_errts$hilo <- as.character(NA)
-d_network_errts[trial.type %in% hi]$hilo <- "hi"
-d_network_errts[trial.type %in% lo]$hilo <- "lo"
-
-d_network_errts_subj <- 
-  d_network_errts[hilo %in% c("hi", "lo"), .(value = mean(value)), by = c("subj", "task", "roi", "hilo")]  ## aggregate
-d_network_errts_subj <- dcast(d_network_errts_subj, subj + task + roi ~ hilo)  ## to wide
-d_network_errts_subj[, hi_v_lo := hi - lo]  ## get contrast
-
+# d <- merge(d_subj_netw_errts, d_subj_netw_wherr, by = c("subj", "task", "roi"))
 
 
 ## plot:
 
-d_network_errts_subj %>%
+d_subj_netw %>%
   
-  ggplot(aes(roi, hi_v_lo)) +
+  ggplot(aes(roi, on)) +
   
   geom_hline(yintercept = 0) +
-  stat_summary(fun = "mean", geom = "col", width = 0.5, position = position_dodge(width = 0.5), fill = "grey60") +
+  stat_summary(aes(fill = task), fun = "mean", geom = "col", width = 0.5, position = position_dodge(width = 0.5)) +
   stat_summary(
     fun.data = "mean_cl_boot", geom = "errorbar", width = 0, size = 1.5, position = position_dodge(width = 0.5)
     ) +
   
   facet_grid(vars(task), scales = "free_y") +
+  scale_fill_brewer(type = "qual", palette = 2) +
+  theme(legend.position = 'none') +
   
-  labs(y = "Mean hi vs lo contrast (b)", x = "Network (Schaefer 7)")
+  labs(y = "Mean ONs contrast (b)", x = "Network (Schaefer 7)")
+
 
 
 
 ## parcel ----
 
+d_subj_parc <- get_trial_data("parcel_errts") %>% get_ons
 
-d_parcel_errts <- readRDS(fnames["parcel_errts"])
-d_parcel_errts %<>% rename(trial.num = trial)
-d_parcel_errts %<>% merge(trialinfo, by = c("subj", "task", "run", "trial.num"))  ## bind just enough info
 
-d_parcel_errts <- d_parcel_errts[!is.na(value)]
-d_parcel_errts$hilo <- as.character(NA)
-d_parcel_errts[trial.type %in% hi]$hilo <- "hi"
-d_parcel_errts[trial.type %in% lo]$hilo <- "lo"
-
-d_parcel_errts_subj <- 
-  d_parcel_errts[hilo %in% c("hi", "lo"), .(value = mean(value)), by = c("subj", "task", "roi", "hilo")]  ## aggregate
-d_parcel_errts_subj <- dcast(d_parcel_errts_subj, subj + task + roi ~ hilo)  ## to wide
-d_parcel_errts_subj[, hi_v_lo := hi - lo]  ## get contrast
+## plot surfaces
 
 
 
 
-## plot MD parcels
+```
 
-d_parcel_errts_subj[roi %in% key_schaefer[schaefermd]$parcel] %>%
+
+
+# $hi-lo$
+
+
+```{r}
+
+
+## network ----
+
+d_subj_netw <- get_trial_data("network_errts") %>% get_hilo
+
+# d <- merge(d_subj_netw_errts, d_subj_netw_wherr, by = c("subj", "task", "roi"))
+
+
+## plot:
+
+d_subj_netw %>%
+  
+  ggplot(aes(roi, hi_v_lo)) +
+  
+  geom_hline(yintercept = 0) +
+  stat_summary(aes(fill = task), fun = "mean", geom = "col", width = 0.5, position = position_dodge(width = 0.5)) +
+  stat_summary(
+    fun.data = "mean_cl_boot", geom = "errorbar", width = 0, size = 1.5, position = position_dodge(width = 0.5)
+    ) +
+  
+  facet_grid(vars(task), scales = "free_y") +
+  scale_fill_brewer(type = "qual", palette = 2) +
+  theme(legend.position = 'none') +
+  
+  labs(y = "Mean hi vs lo contrast (b)", x = "Network (Schaefer 7)")
+
+
+
+
+## parcel ----
+
+d_subj_parc <- get_trial_data("parcel_errts") %>% get_hilo
+
+
+## plot MD parcels:
+
+d_subj_parc[roi %in% key_schaefer[schaefermd]$parcel] %>%
   
   ggplot(aes(task, hi_v_lo, fill = task)) +
   
@@ -132,6 +207,7 @@ d_parcel_errts_subj[roi %in% key_schaefer[schaefermd]$parcel] %>%
   stat_summary(fun = function(x) t.test(x)$statistic, geom = "col", width = 0.5, position = position_dodge(width = 0.5)) +
 
   facet_wrap(vars(roi)) +
+  scale_fill_brewer(type = "qual", palette = 2) +
   theme(legend.position = 'none', axis.text.x = element_blank()) +
   
   labs(y = "Mean hi vs lo contrast (t-stat)", x = "Task (alphabetical)")
@@ -140,29 +216,17 @@ d_parcel_errts_subj[roi %in% key_schaefer[schaefermd]$parcel] %>%
 ## plot surfaces
 
 
-
 ```
 
 
-```{r}
-
-library(reticulate)
-
-conda_create("r-reticulate")
-
-# conda_install("r-reticulate", "scipy")
-# conda_install("r-reticulate", "nipy")
 
 
 
-```
+# GLM-free vs GLM-estimated
 
 
-```{python}
+# wherr vs errts
 
 
-```
-
-## vs GLM
 
 ## ...
