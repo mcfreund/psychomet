@@ -120,16 +120,16 @@ res <- foreach(
   
   ## read noise models (whitening matrices):
   
-  fname_noise <- here(
-    "..", "ub55", "out", "invcov", name_subj_i,
-    paste0(
-      "invcov_", tasks, "_baseline_aggressive1_EVENTS_censored_shifted", 
-      "_est-concat", 
-      "_parc-", switch(do_network + 1, "parcels400", "network7"), 
-      ".RDS"
-    )
-  )
-  noise <- bind_rows(lapply(fname_noise, readRDS), .id = "task")
+  # fname_noise <- here(
+  #   "..", "ub55", "out", "invcov", name_subj_i,
+  #   paste0(
+  #     "invcov_", tasks, "_baseline_aggressive1_EVENTS_censored_shifted", 
+  #     "_est-concat", 
+  #     "_parc-", switch(do_network + 1, "parcels400", "network7"), 
+  #     ".RDS"
+  #   )
+  # )
+  # noise <- bind_rows(lapply(fname_noise, readRDS), .id = "task")
 
   
   
@@ -253,7 +253,7 @@ res <- foreach(
       projs_wthn <- enlist(tasks)
       for (task_i in seq_along(tasks)) {
 
-        U <- resids_roi_i_center[[task_i]]
+        U <- resids_roi_i[[task_i]]
         trialorders_i <- trialorders[[task_i]]
         
         ## (scale by nvert to aid comparison across ROIs):
@@ -297,7 +297,7 @@ res <- foreach(
       projs_btwn <- enlist(tasks)
       for (task_i in seq_along(tasks)) {
         
-        U <- resids_roi_i_center[[task_i]]
+        U <- resids_roi_i[[task_i]]
         trialorders_i <- trialorders[[task_i]]
         
         U <- aperm(U, c(2, 1, 3))
@@ -362,7 +362,7 @@ if (do_btwntsk) {
         "projs-trials", 
         "_axis-", contrast,
         "_cval-btwntsk", 
-        "_", atlas, "_", roi_set,
+        "_", atlas, "-", roi_set,
         "_prew-", switch(do_prew + 1, "none", paste0("concat-runs-", prewtype)),
         "_stand-", switch(do_stand + 1, "none", "axes"),
         "_center-", switch(do_center + 1, "none", "pattern"),
@@ -385,7 +385,7 @@ if (do_wthntsk) {
         "projs-trials", 
         "_axis-", contrast,
         "_cval-wthntsk", 
-        "_", atlas, "_", roi_set,
+        "_", atlas, "-", roi_set,
         "_prew-", switch(do_prew + 1, "none", paste0("concat-runs-", prewtype)),
         "_stand-", switch(do_stand + 1, "none", "axes"),
         "_center-", switch(do_center + 1, "none", "pattern"),
@@ -396,6 +396,33 @@ if (do_wthntsk) {
   )
   
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+## scratch ----
+
+
+
+
+
 
 
 
@@ -481,11 +508,6 @@ if (do_wthntsk) {
 #   facet_grid(vars(roi), vars(task), scales = "free")
 # 
 # 
-# 
-# 
-# 
-# 
-# ## save res ----
 # 
 # 
 # 
@@ -605,10 +627,6 @@ if (do_wthntsk) {
 
 
 
-
-
-
-## scratch ----
 
 
 
