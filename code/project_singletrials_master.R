@@ -21,7 +21,7 @@ source(here("code", "_read_behav.R"))
 ## input vars ----
 
 atlas <- "schaefer"
-resid_type <- "errts"
+resid_type <- "wherr"  ## errts, wherr
 # do_network <- TRUE  ## for noise mods
 do_wthntsk <- TRUE
 do_btwntsk <- TRUE

@@ -19,7 +19,7 @@ for (subj_i in seq_along(subjs)) {
     fname_resids <- here(
       "..", "ub55", 
       "out", "glms", name_subj_i, "RESULTS", name_task_i, paste0("baseline_null_", 1:2), 
-      "errts_trials_target_epoch.RDS"
+      paste0(resid_type, "_trials_target_epoch.RDS")
     )  ## both runs
     resids_i <- lapply(fname_resids, readRDS)
     trialorders[[name_task_i]] <- do.call(cbind, lapply(resids_i, attr, "order"))  ## save trial orders

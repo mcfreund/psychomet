@@ -33,13 +33,13 @@ subjs <- subjs_ub55[!subjs_ub55 %in% c("432332", "DMCC5820265", "DMCC9441378", "
 
 
 
-for (roi_set in c("network07", "parcel")) {
+for (roi_set in c("network07", "parcel400")) {
   
   if (roi_set == "network07") {
 
     rois <- split(key_schaefer$parcel, key_schaefer$network)
     
-  } else if (roi_set == "parcel") {
+  } else if (roi_set == "parcel400") {
     
     rois <- split(key_schaefer$parcel, key_schaefer$parcel)
     
