@@ -178,7 +178,7 @@ res <- foreach(
   if (do_btwntsk) proj_btwn_subj_i <- enlist(names(rois))
   
   for (roi_i in seq_along(rois)) {
-    # roi_i = 1
+    # roi_i = 30
     
     name_roi_i <- names(rois)[roi_i]
     

@@ -1,4 +1,4 @@
-#source(here::here("code", "project_singletrials_master.R"))
+#source(here::here("code", "icc_trial_level", "project_singletrials_master.R"))
 
 
 library(colorout)
@@ -22,7 +22,7 @@ source(here("code", "_read_behav.R"))
 
 atlas <- "schaefer"
 resid_type <- "errts"  ## errts, wherr
-do_network <- TRUE  ## for noise mods
+do_network <- FALSE  ## for noise mods
 do_wthntsk <- TRUE
 do_btwntsk <- TRUE
 do_stand <- TRUE
@@ -77,12 +77,14 @@ lev2 = list(
 
 for (roi_set in c("network07", "parcel")) {
   
+  
   if (roi_set == "network07") {
-
+    
+    if (!do_network) next
     rois <- split(key_schaefer$parcel, key_schaefer$network)
     
   } else if (roi_set == "parcel") {
-    if (prewtype == "multi-alltask") next
+    
     rois <- split(key_schaefer$parcel, key_schaefer$parcel)
     
   }
@@ -93,12 +95,12 @@ for (roi_set in c("network07", "parcel")) {
 		if (contrast == "hilo") {
 
 			do_center <- TRUE  ## centers patterns at mean-pattern
-			source(here("code", "project_singletrials.R"))
+			source(here("code", "icc_trial_level", "project_singletrials.R"))
 
 		} else if (contrast == "ons") {
 
 		  do_center <- FALSE
-			source(here("code", "project_singletrials.R"))
+		  source(here("code", "icc_trial_level", "project_singletrials.R"))
 
 		}
 	  

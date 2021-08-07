@@ -1,4 +1,4 @@
-#source(here::here("code", "get_univariate_means_singletrial_master.R"))
+#source(here::here("code", "icc_trial_level", "get_univariate_means_singletrial_master.R"))
 
 
 
@@ -45,7 +45,9 @@ for (roi_set in c("network07", "parcel400")) {
     
   }
   
-	for (resid_type in c("errts", "wherr")) source(here("code", "get_univariate_means_singletrial.R"))
+	for (resid_type in c("errts", "wherr")) {
+	  source(here::here("code", "icc_trial_level", "get_univariate_means_singletrial_master.R"))
+	}
   
 
 }

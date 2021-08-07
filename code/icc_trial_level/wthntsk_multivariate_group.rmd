@@ -46,8 +46,10 @@ source(here("code", "_read_behav.R"))
 
 fnames <- c(
   "network_hilo" = here("out", "icc", "projs-trials_axis-hilo_cval-wthntsk_schaefer-network07_prew-none_stand-axes_center-pattern_resid-errts.RDS"),
+  "network_hilo_prw" = here("out", "icc", "projs-trials_axis-hilo_cval-wthntsk_schaefer-network07_prew-concat-runs-multi-alltask_stand-axes_center-pattern_resid-errts.RDS"),
   "parcel_hilo"  = here("out", "icc", "projs-trials_axis-hilo_cval-wthntsk_schaefer-parcel_prew-none_stand-axes_center-pattern_resid-errts.RDS"),
   "network_ons" = here("out", "icc", "projs-trials_axis-ons_cval-wthntsk_schaefer-network07_prew-none_stand-axes_center-none_resid-errts.RDS"),
+  "network_ons_prw" = here("out", "icc", "projs-trials_axis-ons_cval-wthntsk_schaefer-network07_prew-concat-runs-multi-alltask_stand-axes_center-none_resid-errts.RDS"),
   "parcel_ons"  = here("out", "icc", "projs-trials_axis-ons_cval-wthntsk_schaefer-parcel_prew-none_stand-axes_center-none_resid-errts.RDS")
 )
 
@@ -245,6 +247,7 @@ def plot_surf_roi_montage(
 ## network ----
 
 d_subj_netw <- get_trial_data("network_ons") %>% get_ons
+d_subj_netw_prw <- get_trial_data("network_ons_prw") %>% get_ons
 
 # table(d_subj_netw$subj, is.na(d_subj_netw$value))
 
@@ -267,6 +270,40 @@ d_subj_netw %>%
   
   labs(y = "Mean ONs contrast (b)", x = "Network (Schaefer 7)")
 
+
+d_subj_netw_prw %>%
+  
+  ggplot(aes(roi, on)) +
+  
+  geom_hline(yintercept = 0) +
+  stat_summary(aes(fill = task), fun = "mean", geom = "col", width = 0.5, position = position_dodge(width = 0.5)) +
+  stat_summary(
+    fun.data = "mean_cl_boot", geom = "errorbar", width = 0, size = 1.5, position = position_dodge(width = 0.5)
+    ) +
+  
+  facet_grid(vars(task), scales = "free_y") +
+  scale_fill_brewer(type = "qual", palette = 2) +
+  theme(legend.position = 'none') +
+  
+  labs(y = "Mean ONs contrast (b)", x = "Network (Schaefer 7)")
+
+
+d_subj_netw <- merge(d_subj_netw_prw, d_subj_netw, by = c("subj", "task", "roi"), suffix = c("_prw", "_van"))
+
+d_subj_netw %>%
+  
+  melt(id.vars = c("subj", "task", "roi"), value.name = "on") %>%
+  ggplot(aes(roi, on, fill = variable)) +
+  
+  geom_hline(yintercept = 2) +
+  stat_summary(fun = function(x) t.test(x)$statistic, geom = "col", width = 0.5, position = position_dodge(width = 0.5)) +
+  
+  facet_grid(vars(task), scales = "free_y") +
+  scale_fill_brewer(type = "qual", palette = 2) +
+  # theme(legend.position = 'none') +
+  
+  labs(y = "Mean ONs contrast (t-stat)", x = "Network (Schaefer 7)")
+  
 
 ```
 
@@ -361,6 +398,7 @@ for task_i in range(len(r.tasks)):
 
 d_subj_netw <- get_trial_data("network_hilo") %>% get_hilo
 # table(d_subj_netw$subj, is.na(d_subj_netw$value))
+d_subj_netw_prw <- get_trial_data("network_hilo_prw") %>% get_hilo
 
 ## plot:
 
@@ -380,6 +418,48 @@ d_subj_netw %>%
 
   labs(y = "Mean hi vs lo contrast (b)", x = "Network (Schaefer 7)")
 
+
+d_subj_netw_prw %>%
+  
+  ggplot(aes(roi, hi_v_lo)) +
+
+  geom_hline(yintercept = 0) +
+  stat_summary(aes(fill = task), fun = "mean", geom = "col", width = 0.5, position = position_dodge(width = 0.5)) +
+  stat_summary(
+    fun.data = "mean_cl_boot", geom = "errorbar", width = 0, size = 1.5, position = position_dodge(width = 0.5)
+    ) +
+
+  facet_grid(vars(task), scales = "free_y") +
+  scale_fill_brewer(type = "qual", palette = 2) +
+  theme(legend.position = 'none') +
+
+  labs(y = "Mean hi vs lo contrast (b)", x = "Network (Schaefer 7)")
+
+
+d_subj_netw <- merge(d_subj_netw_prw, d_subj_netw, by = c("subj", "task", "roi"), suffix = c("_prw", "_van"))
+
+d_subj_netw[, c("subj", "task", "roi", "hi_v_lo_prw", "hi_v_lo_van")] %>%
+  
+  melt(id.vars = c("subj", "task", "roi"), value.name = "hi_v_lo") %>%
+  ggplot(aes(roi, hi_v_lo, fill = variable)) +
+  
+  geom_hline(yintercept = 2) +
+  stat_summary(fun = function(x) t.test(x)$statistic, geom = "col", width = 0.5, position = position_dodge(width = 0.5)) +
+  
+  facet_grid(vars(task), scales = "free_y") +
+  scale_fill_brewer(type = "qual", palette = 2) +
+  # theme(legend.position = 'none') +
+  
+  labs(y = "Mean hi vs lo contrast (t-stat)", x = "Network (Schaefer 7)")
+  
+
+
+d_subj_netw[task %in% c("Axcpt", "Stroop"), c("subj", "task", "roi", "hi_v_lo_prw", "hi_v_lo_van")] %>%
+  # group_by(roi, subj) %>%
+  pivot_wider(id_cols = c("subj", "roi"), names_from = task, values_from = hi_v_lo_prw) %>%
+  group_by(roi) %>%
+  summarize(r = cor(Axcpt, Stroop))
+  # summarize(r = cor(Cuedts, Stern))
 
 ```
 

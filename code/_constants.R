@@ -56,9 +56,26 @@ taskruns <- sort(combo_paste(tasks, c("run1", "run2")))
 
 
 subjs_ub55 <- data.table::fread(here::here("..", "ub55", "in", "ub55_subjects.txt"))[[1]]
-subjs_test <- c()
-subjs_retest <- c()
+# subjs_test <- c()
+# subjs_retest <- c()
 
+subjs_retest_tang <- c(
+  "178243",
+  "130518",
+  "393550",
+  "178647",
+  "877168",
+  "DMCC5009144",
+  "DMCC6627478",
+  "DMCC9478705",
+  "DMCC6671683",
+  "DMCC2609759",
+  "DMCC6418065",
+  "DMCC8033964",
+  "DMCC6721369",
+  "DMCC9441378",
+  "DMCC6705371"
+)
 
 ## TRs of interest
 
