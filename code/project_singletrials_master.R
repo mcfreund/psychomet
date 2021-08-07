@@ -22,7 +22,7 @@ source(here("code", "_read_behav.R"))
 
 atlas <- "schaefer"
 resid_type <- "errts"  ## errts, wherr
-# do_network <- TRUE  ## for noise mods
+do_network <- TRUE  ## for noise mods
 do_wthntsk <- TRUE
 do_btwntsk <- TRUE
 do_stand <- TRUE

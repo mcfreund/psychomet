@@ -186,7 +186,7 @@ res <- foreach(
     
     ## mask:
     
-    which_parcels <- match(rois[[roi_i]], key_schaefer$parcel)  ## works with both network and parcel level
+    which_parcels <- match(rois[[name_roi_i]], key_schaefer$parcel)  ## works with both network and parcel level
     is_roi <- schaefer10k %in% which_parcels
     
     betas_roi_i <- betas_subj_i[is_roi, , , ]
@@ -205,9 +205,7 @@ res <- foreach(
     # resids_task_i <- resids_roi_i[[1]]
     # resids_task_i <- trialorders[[1]]
 
-    
-    
-    
+
     ## get good verts:
     if (do_prew) {
       
@@ -292,9 +290,10 @@ res <- foreach(
         axis_roi_i_reshape <- crossprod(W, axis_roi_i_reshape)
         dim(axis_roi_i_reshape) <- dim(axis_roi_i)
         dimnames(axis_roi_i_reshape) <- dimnames(axis_roi_i)
-        
         # a11 <- crossprod(W, axis_roi_i[, 3, 1])
         # sum(a11 != axis_roi_i_reshape[, "Stern", 1])
+        
+        axis_roi_i <- axis_roi_i_reshape
         
       }
     }
