@@ -26,8 +26,8 @@ resid_type <- "wherr"  ## errts, wherr
 do_wthntsk <- TRUE
 do_btwntsk <- TRUE
 do_stand <- TRUE
-do_prew <- FALSE
-prewtype <- "multi"  ## "univ", "multi"
+do_prew <- TRUE
+prewtype <- "multi-alltask"  ## multi-alltask, multi-trials, "univ...
 do_optwt <- FALSE
 
 
@@ -82,7 +82,7 @@ for (roi_set in c("network07", "parcel")) {
     rois <- split(key_schaefer$parcel, key_schaefer$network)
     
   } else if (roi_set == "parcel") {
-    
+    if (prewtype == "multi-alltask") next
     rois <- split(key_schaefer$parcel, key_schaefer$parcel)
     
   }

@@ -118,19 +118,35 @@ res <- foreach(
   ## read ----
   
   
-  ## read noise models (whitening matrices):
-  
-  # fname_noise <- here(
-  #   "..", "ub55", "out", "invcov", name_subj_i,
-  #   paste0(
-  #     "invcov_", tasks, "_baseline_aggressive1_EVENTS_censored_shifted", 
-  #     "_est-concat", 
-  #     "_parc-", switch(do_network + 1, "parcels400", "network7"), 
-  #     ".RDS"
-  #   )
-  # )
-  # noise <- bind_rows(lapply(fname_noise, readRDS), .id = "task")
-
+  if (do_prew) {
+    
+    ## read noise models (whitening matrices):
+    
+    # fname_noise <- here(
+    #   "..", "ub55", "out", "invcov", name_subj_i,
+    #   paste0(
+    #     "invcov_", tasks, "_baseline_aggressive1_EVENTS_censored_shifted",
+    #     "_est-concat",
+    #     "_parc-", switch(do_network + 1, "parcels400", "network7"),
+    #     ".RDS"
+    #   )
+    # )
+    # noise <- bind_rows(lapply(fname_noise, readRDS), .id = "task")
+    
+    if (prewtype == "multi-alltask") {
+      fname_noise <- here(
+        "..", "ub55", "out", "invcov", name_subj_i,
+        paste0(
+          "invcov_alltask_baseline_aggressive1_EVENTS_censored_shifted",
+          "_est-concat",
+          "_parc-", switch(do_network + 1, "parcels400", "network7"),
+          ".RDS"
+        )
+      )
+      noise <- readRDS(fname_noise)
+    }
+    
+  }
   
   
   ## read trials and trial order (residuals from null model)
@@ -183,19 +199,37 @@ res <- foreach(
         x
         }
       )
+    
+    
+    ## prewhiten using trials
+    # resids_task_i <- resids_roi_i[[1]]
+    # resids_task_i <- trialorders[[1]]
 
     
     
-    ## get good verts:
     
-    # W <- setNames(noise$invcov[noise$roi == name_roi_i], noise$task[noise$roi == name_roi_i])
-    # good_verts <- Reduce(intersect, lapply(W, function(x) attr(x, "which.vert")))
-    # 
-    # if (is.null(good_verts)) next
-    # 
-    # W <- lapply(W, get_good_verts, vert_names_keep = as.character(good_verts))
-    # betas_roi_i <- betas_roi_i[good_verts, , , ]  ## pattern matrix
-    # resids_roi_i <- lapply(resids_roi_i, function(x) x[, good_verts, ])
+    ## get good verts:
+    if (do_prew) {
+      
+      if (prewtype == "multi-alltask") {
+        W <- noise$invcov[[which(noise$roi == name_roi_i)]]
+        good_verts <- attr(W, "which.vert")
+        if (is.null(good_verts)) next
+        betas_roi_i <- betas_roi_i[good_verts, , , ]  ## pattern matrix
+        resids_roi_i <- lapply(resids_roi_i, function(x) x[, good_verts, ])
+      }
+      
+      # W <- setNames(noise$invcov[noise$roi == name_roi_i], noise$task[noise$roi == name_roi_i])
+      # good_verts <- Reduce(intersect, lapply(W, function(x) attr(x, "which.vert")))
+      # 
+      # if (is.null(good_verts)) next
+      # 
+      # W <- lapply(W, get_good_verts, vert_names_keep = as.character(good_verts))
+      # betas_roi_i <- betas_roi_i[good_verts, , , ]  ## pattern matrix
+      # resids_roi_i <- lapply(resids_roi_i, function(x) x[, good_verts, ])
+      
+    }
+    
     
     
     
@@ -244,6 +278,26 @@ res <- foreach(
     # axis_roi_i <- apply(betas_roi_i[, , "lev1", ], 2:3, scale) - apply(betas_roi_i[, , "lev2", ], 2:3, scale)
     
     axis_roi_i <- apply(axis_roi_i, 2:3, scale2unit)
+    
+    
+    if (do_prew) {
+      if (prewtype == "multi-alltask") {
+        
+        axis_roi_i_reshape <- axis_roi_i
+        dim(axis_roi_i_reshape) <- c(dim(axis_roi_i)[1], prod(dim(axis_roi_i)[2:3]))
+        # dim(axis_roi_i_reshape) <- dim(axis_roi_i)
+        # dimnames(axis_roi_i_reshape) <- dimnames(axis_roi_i)
+        # all.equal(axis_roi_i_reshape, axis_roi_i)
+        
+        axis_roi_i_reshape <- crossprod(W, axis_roi_i_reshape)
+        dim(axis_roi_i_reshape) <- dim(axis_roi_i)
+        dimnames(axis_roi_i_reshape) <- dimnames(axis_roi_i)
+        
+        # a11 <- crossprod(W, axis_roi_i[, 3, 1])
+        # sum(a11 != axis_roi_i_reshape[, "Stern", 1])
+        
+      }
+    }
     
     
     ## within-task projections (btwn run):
