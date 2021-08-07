@@ -1,0 +1,482 @@
+---
+title: "Trial-level analyses: multivariate projections --- within-task (leave-one-run-out)"
+output:
+  html_document:
+    toc: true
+    toc_depth: 3
+    number_sections: true
+
+---
+
+
+# intro
+
+
+
+
+```{r setup, include = FALSE}
+
+## basics ----
+
+library(here)
+library(reticulate)
+library(tidyr)
+library(dplyr)
+library(magrittr)
+library(data.table)
+library(abind)
+library(doParallel)
+library(foreach)
+library(mikeutils)
+library(progress)
+library(ggplot2)
+library(grid)
+library(gridExtra)
+library(cowplot)
+library(viridis)
+library(purrr)
+
+theme_set(theme_half_open())
+
+source(here("code", "_constants.R"))
+source(here("code", "_atlases.R"))
+source(here("code", "_funs.R"))
+source(here("code", "_read_behav.R"))
+
+
+fnames <- c(
+  "network_hilo" = here("out", "icc", "projs-trials_axis-hilo_cval-wthntsk_schaefer-network07_prew-none_stand-axes_center-pattern_resid-errts.RDS"),
+  "parcel_hilo"  = here("out", "icc", "projs-trials_axis-hilo_cval-wthntsk_schaefer-parcel_prew-none_stand-axes_center-pattern_resid-errts.RDS"),
+  "network_ons" = here("out", "icc", "projs-trials_axis-ons_cval-wthntsk_schaefer-network07_prew-none_stand-axes_center-none_resid-errts.RDS"),
+  "parcel_ons"  = here("out", "icc", "projs-trials_axis-ons_cval-wthntsk_schaefer-parcel_prew-none_stand-axes_center-none_resid-errts.RDS")
+)
+
+cols <- c("subj", "task", "run", "trial.num", "trial.type", "acc")
+trialinfo <- behav %>% map(~ select(.x, all_of(cols))) %>% rbindlist
+trialinfo <- trialinfo %>% mutate(run = as.character(run))  ## for joining with projections
+
+
+## TODO:
+##  - edit trialinfo so that displays
+
+# hi <- c("BX", "InCon", "RN")
+# lo <- c("BY", "Con", "NN")
+
+hi <- list(
+  Axcpt = "BX",
+  Cuedts = c("num_odd_vow", "num_eve_con", "let_odd_vow", "let_eve_con"),
+  # Cuedts = c("InConSwitch", "InConRepeat"),
+  Stern = "LL5RN",
+  Stroop = "biasInCon"
+) %>% unlist
+lo <- list(
+  Axcpt = "BY",
+  Cuedts = c("num_odd_con", "num_eve_vow", "let_odd_con", "let_eve_vow"),
+  # Cuedts = c("ConSwitch", "ConRepeat"),
+  Stern = "LL5NN",
+  Stroop = "biasCon"
+) %>% unlist
+
+
+
+## functions ----
+
+
+get_trial_data <- function(name) {
+  
+  d <- readRDS(fnames[name])
+  d[, trialnum := NULL]
+  d <- merge(d, trialinfo, by = c("subj", "task", "run", "trial.num"))  ## bind just enough info
+  ## TOD add error checking for expansion --- mismatched trials
+  d
+}
+
+
+get_ons <- function(d) {
+
+  ## get 'ons' per task:
+
+  d <- d[!is.na(value)]
+  d_subj <- d[, .(value = mean(value)), by = c("subj", "task", "roi")]  ## aggregate
+
+  rename(d_subj, on = value)
+
+}
+
+
+get_hilo <- function(d) {
+
+  ## get hilo per task:
+
+  d <- d[!is.na(value)]
+  d$hilo <- as.character(NA)
+  d[trialtype %in% hi]$hilo <- "hi"
+  d[trialtype %in% lo]$hilo <- "lo"
+
+  d_subj <-
+    d[hilo %in% c("hi", "lo"), .(value = mean(value)), by = c("subj", "task", "roi", "hilo")]  ## aggregate
+  d_subj <- dcast(d_subj, subj + task + roi ~ hilo)  ## to wide
+  d_subj[, hi_v_lo := hi - lo]  ## get contrast
+
+  d_subj
+
+}
+
+
+# use_virtualenv("r-reticulate", required = TRUE)
+py_config()
+
+# knitr::knit_engines$set(python = reticulate::eng_python)
+
+```
+
+
+
+```{python setup_py, include = FALSE}
+
+from nilearn import datasets, plotting
+from netneurotools.datasets import fetch_schaefer2018
+import matplotlib.pyplot as plt
+import numpy as np
+import nibabel, pandas
+
+## get schaefer:
+
+fname_schaefer = fetch_schaefer2018("fsaverage5")['400Parcels7Networks']
+schaefer_lh = nibabel.freesurfer.io.read_annot(fname_schaefer.lh)
+schaefer_rh = nibabel.freesurfer.io.read_annot(fname_schaefer.rh)
+
+atlas_rh = schaefer_rh[0]
+atlas_lh = schaefer_lh[0]
+
+# key_rh = schaefer_rh[2]
+# key_lh = schaefer_lh[2]
+
+
+## get fsaverage5
+
+fsaverage = datasets.fetch_surf_fsaverage()
+
+## functions for plotting
+
+def get_overlay(roi_ind, value, hemi):
+
+  is_rh = roi_ind > 200
+
+  if hemi == "right":
+
+    inds = np.array(roi_ind[is_rh] - 200)
+    vals = value[is_rh]
+    overlay = np.zeros(len(schaefer_rh[0]))
+    template = schaefer_rh[0]
+
+  elif hemi == "left":
+
+    inds = np.array(roi_ind[~is_rh])
+    vals = value[~is_rh]
+    overlay = np.zeros(len(schaefer_lh[0]))
+    template = schaefer_lh[0]
+
+  for i in range(len(inds)):
+
+    roi_i = inds[i]
+    val_i = vals.iloc[np.nonzero(inds == roi_i)]
+    overlay[template == roi_i] = val_i
+
+  return overlay
+
+
+## defaults for plotting:
+
+# fs_surf_mesh = 'pial'
+# fs_bg_map = 'sulc'
+# bg_on_data = False
+# darkness = 1
+# cmap = 'magma'
+# hemis = ("left", "right")
+# views = ("lateral", "medial")
+
+
+
+def plot_surf_roi_montage(
+  roi_map, title, fs_surf_mesh = 'pial', fs_bg_map = 'sulc', bg_on_data = False, darkness = 1, cmap = 'magma',
+  ):
+
+  hemis = ("left", "right")
+  views = ("lateral", "medial")
+
+  fig, axs = plt.subplots(1, 4, subplot_kw = dict(projection = "3d"), figsize = plt.figaspect(1/4))
+
+  for hemi_i in range(len(hemis)):
+    for view_i in range(len(views)):
+      # hemi_i = 1
+      # view_i = 1
+
+      plotting.plot_surf_roi(
+
+        fsaverage[fs_surf_mesh + '_' + hemis[hemi_i]],
+        roi_map = roi_map[:, hemi_i],
+        hemi = hemis[hemi_i],
+        view = views[view_i],
+        bg_map = fsaverage[fs_bg_map + '_' + hemis[hemi_i]],
+        bg_on_data = bg_on_data,
+        darkness = darkness,
+        cmap = cmap,
+        colorbar = view_i == 1 & hemi_i == 1,
+        axes = axs[hemi_i*2 + view_i]
+
+        )
+
+      plt.tight_layout(pad = 0, w_pad = 0, h_pad = 0)
+      
+  fig.suptitle(title, fontsize = "xx-large")
+  return fig
+
+
+```
+
+
+# 'ONs'
+
+
+
+```{r on_netw}
+
+## network ----
+
+d_subj_netw <- get_trial_data("network_ons") %>% get_ons
+
+# table(d_subj_netw$subj, is.na(d_subj_netw$value))
+
+
+## plot:
+
+d_subj_netw %>%
+  
+  ggplot(aes(roi, on)) +
+  
+  geom_hline(yintercept = 0) +
+  stat_summary(aes(fill = task), fun = "mean", geom = "col", width = 0.5, position = position_dodge(width = 0.5)) +
+  stat_summary(
+    fun.data = "mean_cl_boot", geom = "errorbar", width = 0, size = 1.5, position = position_dodge(width = 0.5)
+    ) +
+  
+  facet_grid(vars(task), scales = "free_y") +
+  scale_fill_brewer(type = "qual", palette = 2) +
+  theme(legend.position = 'none') +
+  
+  labs(y = "Mean ONs contrast (b)", x = "Network (Schaefer 7)")
+
+
+```
+
+
+```{r on_parc, fig.height = 9, fig.width = 10}
+
+## parcel ----
+
+d_subj_parc_on <- get_trial_data("parcel_ons") %>% get_ons
+
+## get parcel t-stats:
+
+d_group_parc_on <- d_subj_parc_on[, .(tstat = t.test(on)$statistic, p = t.test(on)$p.value), by = c("task", "roi")]
+d_group_parc_on[, p_fdr := p.adjust(p, "fdr"), by = task]  ## adjust p val
+d_group_parc_on[, roi_ind := match(roi, key_schaefer$parcel)]  ## bind indices
+
+```
+
+
+## unthresholded
+
+```{python on_surf, warn = FALSE}
+
+for task_i in range(len(r.tasks)):
+  # task_i = 0
+  
+  ## get task:
+  
+  is_task_i = r.d_group_parc_on.task == r.tasks[task_i]
+  d_on = r.d_group_parc_on[is_task_i]
+  
+  ## get overlay: 
+
+  overlay_on_lh = get_overlay(d_on.roi_ind, d_on.tstat, "left")
+  overlay_on_rh = get_overlay(d_on.roi_ind, d_on.tstat, "right")
+  overlay_on = np.column_stack(np.stack((overlay_on_lh, overlay_on_rh)))
+  
+  ## plot:
+  
+  fig = plot_surf_roi_montage(roi_map = overlay_on, title = r.tasks[task_i])
+  plotting.show()
+  fig.clear()
+  plt.close('all')
+
+
+```
+
+
+## thresholded
+
+
+```{python on_surf_thresh}
+
+for task_i in range(len(r.tasks)):
+  # task_i = 0
+
+  ## get task:
+
+  is_task_i = r.d_group_parc_on.task == r.tasks[task_i]
+  d_on = r.d_group_parc_on[is_task_i]
+
+  ## get overlay:
+
+  d_on.loc[d_on['p_fdr'] > 0.05, 'tstat'] = 0
+
+  overlay_on_lh = get_overlay(d_on.roi_ind, d_on.tstat, "left")
+  overlay_on_rh = get_overlay(d_on.roi_ind, d_on.tstat, "right")
+  overlay_on = np.column_stack(np.stack((overlay_on_lh, overlay_on_rh)))
+
+  ## plot:
+
+  plot_surf_roi_montage(roi_map = overlay_on, title = r.tasks[task_i])
+  plotting.show()
+  fig.clear()
+  plt.close('all')
+
+
+```
+
+
+
+
+
+
+# hi -- lo
+
+
+```{r hilo_netw}
+
+
+## network ----
+
+d_subj_netw <- get_trial_data("network_hilo") %>% get_hilo
+# table(d_subj_netw$subj, is.na(d_subj_netw$value))
+
+## plot:
+
+d_subj_netw %>%
+
+  ggplot(aes(roi, hi_v_lo)) +
+
+  geom_hline(yintercept = 0) +
+  stat_summary(aes(fill = task), fun = "mean", geom = "col", width = 0.5, position = position_dodge(width = 0.5)) +
+  stat_summary(
+    fun.data = "mean_cl_boot", geom = "errorbar", width = 0, size = 1.5, position = position_dodge(width = 0.5)
+    ) +
+
+  facet_grid(vars(task), scales = "free_y") +
+  scale_fill_brewer(type = "qual", palette = 2) +
+  theme(legend.position = 'none') +
+
+  labs(y = "Mean hi vs lo contrast (b)", x = "Network (Schaefer 7)")
+
+
+```
+
+
+```{r hilo_parc, fig.height = 9, fig.width = 10}
+
+## parcel ----
+
+d_subj_parc_hilo <- get_trial_data("parcel_hilo") %>% get_hilo
+
+
+## plot MD parcels:
+
+d_subj_parc_hilo[roi %in% key_schaefer[schaefermd]$parcel] %>%
+
+  ggplot(aes(task, hi_v_lo, fill = task)) +
+
+  geom_hline(yintercept = 2) +
+  stat_summary(fun = function(x) t.test(x)$statistic, geom = "col", width = 0.5, position = position_dodge(width = 0.5)) +
+
+  facet_wrap(vars(roi)) +
+  scale_fill_brewer(type = "qual", palette = 2) +
+  theme(legend.position = 'none', axis.text.x = element_blank()) +
+
+  labs(y = "Mean hi vs lo contrast (t-stat)", title = "Schaeferized MMP-MD", x = "Task (alphabetical)")
+
+
+## plot surfaces
+
+## get parcel t-stats:
+
+d_group_parc_hilo <- d_subj_parc_hilo[, .(tstat = t.test(hi_v_lo)$statistic, p = t.test(hi_v_lo)$p.value),
+                                      by = c("task", "roi")]
+d_group_parc_hilo[, p_fdr := p.adjust(p, "fdr"), by = task]  ## adjust p val
+d_group_parc_hilo[, roi_ind := match(roi, key_schaefer$parcel)]  ## bind indices
+
+```
+
+## unthresholded
+
+```{python hilo_surf}
+
+for task_i in range(len(r.tasks)):
+  # task_i = 0
+
+  ## get task:
+
+  is_task_i = r.d_group_parc_hilo.task == r.tasks[task_i]
+  d_hilo = r.d_group_parc_hilo[is_task_i]
+
+  ## get overlay:
+
+  overlay_hilo_lh = get_overlay(d_hilo.roi_ind, d_hilo.tstat, "left")
+  overlay_hilo_rh = get_overlay(d_hilo.roi_ind, d_hilo.tstat, "right")
+  overlay_hilo = np.column_stack(np.stack((overlay_hilo_lh, overlay_hilo_rh)))
+
+  ## plot:
+
+  plot_surf_roi_montage(roi_map = overlay_hilo, title = r.tasks[task_i])
+  plotting.show()
+  fig.clear()
+  plt.close('all')
+
+
+```
+
+## thresholded
+
+```{python hilo_surf_thresh}
+
+for task_i in range(len(r.tasks)):
+  # task_i = 0
+
+  ## get task:
+
+  is_task_i = r.d_group_parc_hilo.task == r.tasks[task_i]
+  d_hilo = r.d_group_parc_hilo[is_task_i]
+
+  ## get overlay:
+
+  d_hilo.loc[d_hilo['p_fdr'] > 0.05, 'tstat'] = 0
+
+  overlay_hilo_lh = get_overlay(d_hilo.roi_ind, d_hilo.tstat, "left")
+  overlay_hilo_rh = get_overlay(d_hilo.roi_ind, d_hilo.tstat, "right")
+  overlay_hilo = np.column_stack(np.stack((overlay_hilo_lh, overlay_hilo_rh)))
+
+  ## plot:
+
+  plot_surf_roi_montage(roi_map = overlay_hilo, title = r.tasks[task_i])
+  plotting.show()
+  fig.clear()
+  plt.close('all')
+
+
+```
+
+
+
+
+

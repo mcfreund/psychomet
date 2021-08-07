@@ -69,7 +69,7 @@ get_trial_data <- function(name) {
   d <- rename(d, trial.num = trial)
   d <- merge(d, trialinfo, by = c("subj", "task", "run", "trial.num"))  ## bind just enough info
   ## TOD add error checking for expansion --- mismatched trials
-  
+  d
 }
 
 
@@ -104,10 +104,116 @@ get_hilo <- function(d) {
 }
 
 
-use_virtualenv("r-reticulate", required = TRUE)
+# use_virtualenv("r-reticulate", required = TRUE)
 py_config()
 
-knitr::knit_engines$set(python = reticulate::eng_python)
+# knitr::knit_engines$set(python = reticulate::eng_python)
+
+```
+
+
+
+```{python setup_py, include = FALSE}
+
+from nilearn import datasets, plotting
+from netneurotools.datasets import fetch_schaefer2018
+import matplotlib.pyplot as plt
+import numpy as np
+import nibabel, pandas
+
+## get schaefer:
+
+fname_schaefer = fetch_schaefer2018("fsaverage5")['400Parcels7Networks']
+schaefer_lh = nibabel.freesurfer.io.read_annot(fname_schaefer.lh)
+schaefer_rh = nibabel.freesurfer.io.read_annot(fname_schaefer.rh)
+
+atlas_rh = schaefer_rh[0]
+atlas_lh = schaefer_lh[0]
+
+# key_rh = schaefer_rh[2]
+# key_lh = schaefer_lh[2]
+
+
+## get fsaverage5
+
+fsaverage = datasets.fetch_surf_fsaverage()
+
+## functions for plotting
+
+def get_overlay(roi_ind, value, hemi):
+
+  is_rh = roi_ind > 200
+
+  if hemi == "right":
+
+    inds = np.array(roi_ind[is_rh] - 200)
+    vals = value[is_rh]
+    overlay = np.zeros(len(schaefer_rh[0]))
+    template = schaefer_rh[0]
+
+  elif hemi == "left":
+
+    inds = np.array(roi_ind[~is_rh])
+    vals = value[~is_rh]
+    overlay = np.zeros(len(schaefer_lh[0]))
+    template = schaefer_lh[0]
+
+  for i in range(len(inds)):
+
+    roi_i = inds[i]
+    val_i = vals.iloc[np.nonzero(inds == roi_i)]
+    overlay[template == roi_i] = val_i
+
+  return overlay
+
+
+## defaults for plotting:
+
+# fs_surf_mesh = 'pial'
+# fs_bg_map = 'sulc'
+# bg_on_data = False
+# darkness = 1
+# cmap = 'magma'
+# hemis = ("left", "right")
+# views = ("lateral", "medial")
+
+
+
+def plot_surf_roi_montage(
+  roi_map, title, fs_surf_mesh = 'pial', fs_bg_map = 'sulc', bg_on_data = False, darkness = 1, cmap = 'magma',
+  ):
+
+  hemis = ("left", "right")
+  views = ("lateral", "medial")
+
+  fig, axs = plt.subplots(1, 4, subplot_kw = dict(projection = "3d"), figsize = plt.figaspect(1/4))
+
+  for hemi_i in range(len(hemis)):
+    for view_i in range(len(views)):
+      # hemi_i = 1
+      # view_i = 1
+
+      plotting.plot_surf_roi(
+
+        fsaverage[fs_surf_mesh + '_' + hemis[hemi_i]],
+        roi_map = roi_map[:, hemi_i],
+        hemi = hemis[hemi_i],
+        view = views[view_i],
+        bg_map = fsaverage[fs_bg_map + '_' + hemis[hemi_i]],
+        bg_on_data = bg_on_data,
+        darkness = darkness,
+        cmap = cmap,
+        colorbar = view_i == 1 & hemi_i == 1,
+        axes = axs[hemi_i*2 + view_i]
+
+        )
+
+      plt.tight_layout(pad = 0, w_pad = 0, h_pad = 0)
+      
+  fig.suptitle(title, fontsize = "xx-large")
+  return fig
+
+
 ```
 
 
@@ -115,19 +221,17 @@ knitr::knit_engines$set(python = reticulate::eng_python)
 
 
 
-```{r}
+```{r on_netw}
 
-
-# ## network ----
+## network ----
 
 d_subj_netw <- get_trial_data("network_errts") %>% get_ons
 
-
 ## plot:
 
-d %>%
+d_subj_netw %>%
   
-  ggplot(aes(roi, on_errts)) +
+  ggplot(aes(roi, on)) +
   
   geom_hline(yintercept = 0) +
   stat_summary(aes(fill = task), fun = "mean", geom = "col", width = 0.5, position = position_dodge(width = 0.5)) +
@@ -142,146 +246,257 @@ d %>%
   labs(y = "Mean ONs contrast (b)", x = "Network (Schaefer 7)")
 
 
+```
 
+
+```{r on_parc, fig.height = 9, fig.width = 10}
 
 ## parcel ----
 
-# d_subj_parc <- get_trial_data("parcel_errts") %>% get_ons
+d_subj_parc_on <- get_trial_data("parcel_errts") %>% get_ons
+
+## get parcel t-stats:
+
+d_group_parc_on <- d_subj_parc_on[, .(tstat = t.test(on)$statistic, p = t.test(on)$p.value), by = c("task", "roi")]
+d_group_parc_on[, p_fdr := p.adjust(p, "fdr"), by = task]  ## adjust p val
+d_group_parc_on[, roi_ind := match(roi, key_schaefer$parcel)]  ## bind indices
+
+```
 
 
-## plot surfaces
+## unthresholded
+
+```{python on_surf, warn = FALSE}
+
+for task_i in range(len(r.tasks)):
+  # task_i = 0
+  
+  ## get task:
+  
+  is_task_i = r.d_group_parc_on.task == r.tasks[task_i]
+  d_on = r.d_group_parc_on[is_task_i]
+  
+  ## get overlay: 
+
+  overlay_on_lh = get_overlay(d_on.roi_ind, d_on.tstat, "left")
+  overlay_on_rh = get_overlay(d_on.roi_ind, d_on.tstat, "right")
+  overlay_on = np.column_stack(np.stack((overlay_on_lh, overlay_on_rh)))
+  
+  ## plot:
+  
+  fig = plot_surf_roi_montage(roi_map = overlay_on, title = r.tasks[task_i])
+  plotting.show()
+  fig.clear()
+  plt.close('all')
+
+
+```
+
+
+## thresholded
+
+
+```{python on_surf_thresh}
+
+for task_i in range(len(r.tasks)):
+  # task_i = 0
+
+  ## get task:
+
+  is_task_i = r.d_group_parc_on.task == r.tasks[task_i]
+  d_on = r.d_group_parc_on[is_task_i]
+
+  ## get overlay:
+
+  d_on.loc[d_on['p_fdr'] > 0.05, 'tstat'] = 0
+
+  overlay_on_lh = get_overlay(d_on.roi_ind, d_on.tstat, "left")
+  overlay_on_rh = get_overlay(d_on.roi_ind, d_on.tstat, "right")
+  overlay_on = np.column_stack(np.stack((overlay_on_lh, overlay_on_rh)))
+
+  ## plot:
+
+  plot_surf_roi_montage(roi_map = overlay_on, title = r.tasks[task_i])
+  plotting.show()
+  fig.clear()
+  plt.close('all')
 
 
 ```
 
 
 
-```{python}
-
-from nilearn import datasets
-from nilearn import plotting
-
-
-motor_images = datasets.fetch_neurovault_motor_task()
-stat_img = motor_images.images[0]
-
-plotting.plot_stat_map(stat_img, threshold = 3, title = 'plot_stat_map', cut_coords = [36, -27, 66])
-plotting.show()
-
-```
-
-
-```{python}
-import matplotlib.pyplot as plt
-import numpy as np
-t = np.arange(0.0, 2.0, 0.01)
-s = 1 + np.sin(2 * np.pi * t)
-fig, ax = plt.subplots()
-ax.plot(t, s)
-plt.show()
-```
 
 
 
-# $hi-lo$
+# hi -- lo
 
 
-```{r, eval = FALSE}
+```{r hilo_netw}
 
 
 ## network ----
 
 d_subj_netw <- get_trial_data("network_errts") %>% get_hilo
 
-# d <- merge(d_subj_netw_errts, d_subj_netw_wherr, by = c("subj", "task", "roi"))
-
-
 ## plot:
 
 d_subj_netw %>%
-  
+
   ggplot(aes(roi, hi_v_lo)) +
-  
+
   geom_hline(yintercept = 0) +
   stat_summary(aes(fill = task), fun = "mean", geom = "col", width = 0.5, position = position_dodge(width = 0.5)) +
   stat_summary(
     fun.data = "mean_cl_boot", geom = "errorbar", width = 0, size = 1.5, position = position_dodge(width = 0.5)
     ) +
-  
+
   facet_grid(vars(task), scales = "free_y") +
   scale_fill_brewer(type = "qual", palette = 2) +
   theme(legend.position = 'none') +
-  
+
   labs(y = "Mean hi vs lo contrast (b)", x = "Network (Schaefer 7)")
 
 
+```
 
+
+```{r hilo_parc, fig.height = 9, fig.width = 10}
 
 ## parcel ----
 
-d_subj_parc <- get_trial_data("parcel_errts") %>% get_hilo
+d_subj_parc_hilo <- get_trial_data("parcel_errts") %>% get_hilo
 
 
 ## plot MD parcels:
 
-d_subj_parc[roi %in% key_schaefer[schaefermd]$parcel] %>%
-  
+d_subj_parc_hilo[roi %in% key_schaefer[schaefermd]$parcel] %>%
+
   ggplot(aes(task, hi_v_lo, fill = task)) +
-  
+
   geom_hline(yintercept = 2) +
   stat_summary(fun = function(x) t.test(x)$statistic, geom = "col", width = 0.5, position = position_dodge(width = 0.5)) +
 
   facet_wrap(vars(roi)) +
   scale_fill_brewer(type = "qual", palette = 2) +
   theme(legend.position = 'none', axis.text.x = element_blank()) +
-  
-  labs(y = "Mean hi vs lo contrast (t-stat)", x = "Task (alphabetical)")
+
+  labs(y = "Mean hi vs lo contrast (t-stat)", title = "Schaeferized MMP-MD", x = "Task (alphabetical)")
 
 
 ## plot surfaces
 
+## get parcel t-stats:
+
+d_group_parc_hilo <- d_subj_parc_hilo[, .(tstat = t.test(hi_v_lo)$statistic, p = t.test(hi_v_lo)$p.value),
+                                      by = c("task", "roi")]
+d_group_parc_hilo[, p_fdr := p.adjust(p, "fdr"), by = task]  ## adjust p val
+d_group_parc_hilo[, roi_ind := match(roi, key_schaefer$parcel)]  ## bind indices
+
+```
+
+## unthresholded
+
+```{python hilo_surf}
+
+for task_i in range(len(r.tasks)):
+  # task_i = 0
+
+  ## get task:
+
+  is_task_i = r.d_group_parc_hilo.task == r.tasks[task_i]
+  d_hilo = r.d_group_parc_hilo[is_task_i]
+
+  ## get overlay:
+
+  overlay_hilo_lh = get_overlay(d_hilo.roi_ind, d_hilo.tstat, "left")
+  overlay_hilo_rh = get_overlay(d_hilo.roi_ind, d_hilo.tstat, "right")
+  overlay_hilo = np.column_stack(np.stack((overlay_hilo_lh, overlay_hilo_rh)))
+
+  ## plot:
+
+  plot_surf_roi_montage(roi_map = overlay_hilo, title = r.tasks[task_i])
+  plotting.show()
+  fig.clear()
+  plt.close('all')
+
+
+```
+
+## thresholded
+
+```{python hilo_surf_thresh}
+
+for task_i in range(len(r.tasks)):
+  # task_i = 2
+
+  ## get task:
+
+  is_task_i = r.d_group_parc_hilo.task == r.tasks[task_i]
+  d_hilo = r.d_group_parc_hilo[is_task_i]
+
+  ## get overlay:
+
+  d_hilo.loc[d_hilo['p_fdr'] > 0.05, 'tstat'] = 0
+
+  overlay_hilo_lh = get_overlay(d_hilo.roi_ind, d_hilo.tstat, "left")
+  overlay_hilo_rh = get_overlay(d_hilo.roi_ind, d_hilo.tstat, "right")
+  overlay_hilo = np.column_stack(np.stack((overlay_hilo_lh, overlay_hilo_rh)))
+
+  ## plot:
+
+  plot_surf_roi_montage(roi_map = overlay_hilo, title = r.tasks[task_i])
+  plotting.show()
+  fig.clear()
+  plt.close('all')
+
 
 ```
 
 
 
-# GLM-free vs GLM-estimated
 
 
-# wherr vs errts
-
-```{r}
 
 
-d <- merge(
-  get_trial_data("network_errts") %>% get_ons,
-  get_trial_data("network_wherr") %>% get_ons,
-  by = c("subj", "task", "roi"), 
-  suffix = c("_errts", "_wherr")
-  )
+
+<!-- # GLM-free vs GLM-estimated -->
 
 
-d %>%
-  
-  melt(id.vars = c("subj", "task", "roi")) %>%
-  
-  ggplot(aes(roi, value)) +
-  
-  geom_hline(yintercept = 0) +
-  stat_summary(aes(fill = variable), fun = "mean", geom = "col", width = 0.5, position = position_dodge(width = 0.5)) +
-  stat_summary(
-    aes(fill = variable),
-    fun.data = "mean_cl_boot", geom = "errorbar", width = 0, size = 1.5, position = position_dodge(width = 0.5)
-    ) +
-  
-  facet_grid(vars(task), scales = "free_y") +
-  scale_fill_brewer(type = "qual", palette = 2) +
-  # theme(legend.position = 'none') +
-  
-  labs(y = "Mean ONs contrast (b)", x = "Network (Schaefer 7)")
+<!-- # wherr vs errts -->
+
+<!-- ```{r} -->
 
 
-```
+<!-- d <- merge( -->
+<!--   get_trial_data("network_errts") %>% get_ons, -->
+<!--   get_trial_data("network_wherr") %>% get_ons, -->
+<!--   by = c("subj", "task", "roi"),  -->
+<!--   suffix = c("_errts", "_wherr") -->
+<!--   ) -->
 
 
-## ...
+<!-- d %>% -->
+
+<!--   melt(id.vars = c("subj", "task", "roi")) %>% -->
+
+<!--   ggplot(aes(roi, value)) + -->
+
+<!--   geom_hline(yintercept = 0) + -->
+<!--   stat_summary(aes(fill = variable), fun = "mean", geom = "col", width = 0.5, position = position_dodge(width = 0.5)) + -->
+<!--   stat_summary( -->
+<!--     aes(fill = variable), -->
+<!--     fun.data = "mean_cl_boot", geom = "errorbar", width = 0, size = 1.5, position = position_dodge(width = 0.5) -->
+<!--     ) + -->
+
+<!--   facet_grid(vars(task), scales = "free_y") + -->
+<!--   scale_fill_brewer(type = "qual", palette = 2) + -->
+<!--   # theme(legend.position = 'none') + -->
+
+<!--   labs(y = "Mean ONs contrast (b)", x = "Network (Schaefer 7)") -->
+
+
+<!-- ``` -->
+
+
+<!-- ## ... -->
