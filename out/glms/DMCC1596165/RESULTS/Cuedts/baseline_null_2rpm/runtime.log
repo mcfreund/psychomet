@@ -1,0 +1,26 @@
+++ 3dREMLfit: AFNI version=AFNI_18.3.16 (Dec 11 2018) [64-bit]
+++ Authored by: RWCox
+++ GOFORIT ==> Matrix de-singularization is engaged!
+++ Number of OpenMP threads = 15
+++ No mask ==> computing for all 10242 voxels
+++ -----  matrix condition (1200x20):  3.87202  ++ VERY GOOD ++
+[7m*+ WARNING:[0m -matrix file is missing Stim attributes:
+ + can only use symbolic name 'Col' in GLTs (cf. '-help')
+[7m*+ WARNING:[0m  ==> bucket dataset output is disabled
+[7m*+ WARNING:[0m  ==> -nobout is disabled
+++ Loading input dataset into memory
+ + masked off 888 voxels for being all zero; 9354 left in mask
+++ starting REML setup calculations; total CPU=0.00 Elapsed=12.04
+ + X matrix: 65.000% of elements are nonzero
+ + starting 15 OpenMP threads for REML setup
+ + REML setup finished: matrix rows=1200 cols=20; 109*1 cases; total CPU=0.00 Elapsed=12.74
+ +  average case bandwidth = 12.31
+++ REML voxel loop: [15 threads]0123456789.0123456789.0123456789.0123456789.01234567
+ + ARMA voxel parameters estimated: total CPU=0.00 Elapsed=41.51
+++ GLSQ loop:0123456789.0123456789.0123456789.0123456789.0123456789.
+ + GLSQ regression done: total CPU=0.00 Elapsed=50.15
+++ Output dataset /data/nil-external/ccp/freund/psychomet/out/glms/DMCC1596165/RESULTS/Cuedts/baseline_null_2rpm/stats_var_DMCC1596165_R_REML.func.gii
+++ Output dataset /data/nil-external/ccp/freund/psychomet/out/glms/DMCC1596165/RESULTS/Cuedts/baseline_null_2rpm/errts_DMCC1596165_R_REML.func.gii
+++ Output dataset /data/nil-external/ccp/freund/psychomet/out/glms/DMCC1596165/RESULTS/Cuedts/baseline_null_2rpm/wherr_DMCC1596165_R_REML.func.gii
+ + unloading input dataset and REML matrices
+++ 3dREMLfit is all done! total CPU=0.00 Elapsed=60.52
