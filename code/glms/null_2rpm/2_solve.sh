@@ -3,61 +3,96 @@
 ## NB: assumes wd is /data/nil-external/ccp/freund/psychomet
 
 
+conda deactivate  ## make sure python3 env is not attached
 
 ## <<<<<< BEGIN USER INPUT: define vars for master script >>>>>>
 
 cd /data/nil-external/ccp/freund/psychomet
 
-subjects_file=in/subjects_crosswave_complete_2021-09-01.txt
+subjects_file=in/subjects_wave12_complete_2021-09-01.txt
 do_single_subj=false  ## for dev/debugging
 sessions=(baseline proactive reactive)
 hemis=(L R)
-tasks=(Cuedts Stroop Stern)
-wave=2
+tasks=(Axcpt Cuedts Stroop Stern)
+waves=(1 2)
 
 ## <<<<<< END USER INPUT >>>>>>
 
 
 ## additional vars:
 
-glm="null_2rpm"  ## name of subdirectory in scripts; will be added to subdirectory name in out
+source code/glms/3dREMLfit_2rpm.sh  ## for 3dREMLfit function
+glm_prefix="null_2rpm"  ## name of subdirectory in scripts; will be added to subdirectory name in out
 suffix=""
 
 
-if [ ${wave} = 2 ]
+if [ $do_single_subj = false ]
 then
-    wave_dir=HCP_SUBJECTS_BACKUPS
-else
-    wave_dir=DMCC_Phase$wave
-fi
-
-if [ $do_single_subj = true ]
-then
-    subject='130518'
-    session_i=0
-    task_i=0
-    run_i=0
-else
     mapfile -t subjects < $subjects_file
+else
+    subjects=130518
 fi
 
-
-# paths:
-
-stimts=/data/nil-bluearc/ccp-hcp/DMCC_ALL_BACKUPS/$wave_dir/fMRIPrep_AFNI_ANALYSIS/  ## JUST NEED MOVEMENT REGS
-out=/data/nil-external/ccp/freund/psychomet/out/glms/
-img=/data/nil-bluearc/ccp-hcp/DMCC_ALL_BACKUPS/$wave_dir/fMRIPrep_AFNI_ANALYSIS/
-scripts=/data/nil-external/ccp/freund/psychomet/code/glms/
 
 
 ## run:
 
-for subject in ${subjects[@]}; do
+wd=$(pwd)
 
-	echo ${subject}
-	
-	source code/glms/3dREMLfit_2rpm.sh
+for wave in ${waves[@]}; do
 
-	wait
+    echo "running wave "${wave}
+
+    glm=$glm_prefix"_wave"$wave
+
+    if [ ${wave} = 1 ]
+    then
+        wave_dir=HCP_SUBJECTS_BACKUPS
+    else  ## wave 2 or greater
+        wave_dir=DMCC_Phase$((wave+1))  ## add one to get phase
+    fi
+
+    # paths:
+
+    stimts=/data/nil-bluearc/ccp-hcp/DMCC_ALL_BACKUPS/$wave_dir/fMRIPrep_AFNI_ANALYSIS/  ## JUST NEED MOVEMENT REGS
+    out=/data/nil-external/ccp/freund/psychomet/out/glms/
+    img=/data/nil-bluearc/ccp-hcp/DMCC_ALL_BACKUPS/$wave_dir/fMRIPrep_AFNI_ANALYSIS/
+    scripts=/data/nil-external/ccp/freund/psychomet/code/glms/
+
+    for subject in ${subjects[@]}; do
+
+        echo ${subject}
+
+            for task in ${tasks[@]}; do
+
+                for session in ${sessions[@]}; do
+
+                    ## define paths and names, change dir
+                        
+                    sess=${session:0:3}  ## get short name
+                    sess=${sess^}  ## Namecase
+                    dir_stimts=${stimts}${subject}/INPUT_DATA/${task}/${session}
+                    dir_out=${out}${subject}/RESULTS/${task}/${session}_${glm}${suffix}
+
+                    cd ${dir_out}
+
+                    for hemi in ${hemis[@]}; do
+
+                        name_img1=${img}${subject}/INPUT_DATA/${task}/${session}/lpi_scale_tfMRI_${task}${sess}1_AP_${hemi}.func.gii
+                        name_img2=${img}${subject}/INPUT_DATA/${task}/${session}/lpi_scale_tfMRI_${task}${sess}2_PA_${hemi}.func.gii
+
+                        remlfit_2rpm ${session} ${hemi} < /dev/null > ${dir_out}/runtime_3dREMLfit.log 2>&1 &
+
+                    done
+
+                done
+
+            done
+
+        cd ${wd}
+
+        wait  ## run subjs serially, lower vars in parallel
+
+    done
 
 done
