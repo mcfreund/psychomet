@@ -11,6 +11,7 @@ library(foreach)
 library(mikeutils)
 library(ggplot2)
 library(purrr)
+library(gifti)
 
 source(here("code", "_constants.R"))
 source(here("code", "_atlases.R"))
@@ -20,13 +21,13 @@ source(here("code", "_read_behav.R"))
 
 subjs <- subjs_wave12
 do_waves <- c(1, 2)
-resid_type <- "errts"  ## "wherr" or "errts"
+resid_type <- "errts"  ## "wherr" or "errts"; probably don't want to use wherr for this purpose.
 
 ## iterators for dev:
-# wave_i <- 2
+# wave_i <- 1
 # task_i <- 4
 # session_i <- 1
-# subj_i <- 6
+# subj_i <- 1
 
 
 ## run ----
@@ -82,7 +83,7 @@ for (wave_i in seq_along(waves)) {
         
         onsets <- c(
           stimtimes[[subj_i]][1, ], 
-          stimtimes[[subj_i]][2, ] + 1.2*n_tr/2    ## shift run 2 onsets by duration of run 1
+          stimtimes[[subj_i]][2, ] + 1.2*n_tr/2    ## shift run 2 onsets by duration (in seconds) of run 1
           )
         
         if (sum(duplicated(onsets)) > 0) {
@@ -104,7 +105,7 @@ for (wave_i in seq_along(waves)) {
           
           ## assign unique value to each onset (i.e., each trial)
           
-          target_tr_val <- target_trs[[name_task_i]][target_tr_i] + 1 ## plus 1 because of TENTzero
+          target_tr_val <- target_trs[[name_task_i]][target_tr_i] + 1 ## plus 1 because of TENTzero/afni 0 based index
           trial_nums <- seq_along(intervals)
 
           tr_grid <- numeric(n_tr)
@@ -126,7 +127,8 @@ for (wave_i in seq_along(waves)) {
         ## scale:
         
         divisor <- colSums(dummy)
-        dummy[, divisor == 0] <- NA ## when this is zero, all TRs of the trial were censored due to motion
+        dummy[, divisor < 1] <- NA ## when this is zero, all TRs of the trial were censored due to motion
+        if (any(divisor < 1)) print("got one!")  ## just to look
         A <- sweep(dummy, 2, divisor, "/")  ## normalize elements of each column (trial) to sum to one
         
         ## save:
@@ -190,6 +192,57 @@ for (wave_i in seq_along(waves)) {
 
 
 
+## <<<<<< BEGIN CHECKING WITH PREVIOUS IMPLEMENTATION >>>>>>
+
+A_list_ub55 <- readRDS(here("..", "ub55", "A_list.RDS"))
+subjs_common <- intersect(A_list_ub55$subj, subjs)
+A_list_ub55 <- A_list_ub55 %>% filter(subj %in% subjs_common)
+
+subj_val = "448347"
+task_val = "Stroop"
+
+named_vector <- function(type, nms) setNames(vector(type, length(nms)), nms)
+
+r <- named_vector("logical", combo_paste(tasks, subjs_common))
+for (task_val in tasks) {
+
+  for (subj_val in subjs_common) {
+
+    a1 <- A_list_ub55 %>% filter(subj == subj_val, task == task_val) %>% select(mat)
+    a1_run1 <- a1[1, "mat"][[1]][[1]]
+    a1_run2 <- a1[2, "mat"][[1]][[1]]
+
+    a1 <- rbind(
+      cbind(a1_run1, array(0, dim = dim(a1_run2))),
+      cbind(array(0, dim = dim(a1_run1)), a1_run2)
+    )
+
+    nm <- paste0("wave1_", task_val, "_baseline_", subj_val)
+    a2 <- t(A_list[[nm]])
+
+    r[[paste0(task_val, "_", subj_val)]] <- isTRUE(all.equal(c(a1), c(a2)))
+    # rowSums(is.na(a1)) > 0
+    # a2[rowSums(is.na(a1)) > 0, ]
+
+
+  }
+
+}
+
+## only diffs seem to be final trials at end of run, which sometimes are NA in original implementation.
+## checking the censor lists, these trials/trs are not censored, so they should be in there.
+
+
+
+## <<<<<< END CHECKING WITH PREVIOUS IMPLEMENTATION >>>>>>
+
+
+
+
+# name_subj_i <- subjs[subj_i]
+# name_wave_i <- waves[wave_i]
+# name_task_i <- tasks[task_i]
+
 cl <- makeCluster(n_core / 2)
 registerDoParallel(cl)
 res <- foreach(
@@ -239,7 +292,6 @@ res <- foreach(
         dims_bad <- any(dim(E) != c(n_tr, n_vert))
         if (dims_bad) stop ("bad dims: error time-series")
         
-        
         ## average and save:
         
         B <- crossprod(A, E)  ## trial by vertex matrix B
@@ -256,10 +308,6 @@ res <- foreach(
   
 }
 stopCluster(cl)
-
-
-
-
 
 
 

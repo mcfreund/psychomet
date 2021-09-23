@@ -1,0 +1,75 @@
+---
+title: "Trial-level analyses: univariate means, baseline"
+output:
+  html_document:
+    toc: true
+    toc_depth: 3
+    number_sections: true
+
+---
+
+
+```{r}
+
+library(colorout)
+library(here)
+library(reticulate)
+library(tidyr)
+library(dplyr)
+library(magrittr)
+library(data.table)
+library(abind)
+library(doParallel)
+library(foreach)
+library(mikeutils)
+library(progress)
+library(ggplot2)
+library(grid)
+library(gridExtra)
+library(cowplot)
+library(viridis)
+library(purrr)
+
+theme_set(theme_half_open())
+
+source(here("code", "_constants.R"))
+source(here("code", "_atlases.R"))
+source(here("code", "_funs.R"))
+source(here("code", "_read_behav.R"))
+
+hi <- c("BX", "InCon", "RN")
+lo <- c("BY", "Con", "NN")
+
+
+subjs <- subjs_wave12
+
+
+## read data
+
+d <- read_results(
+  c("wave1", "wave2"), tasks, "baseline", subjs,
+  glmname = "null_2rpm", filename = "means-trials_schaefer-parcel400_resid-errts.csv",
+  fread
+)
+d <- rbindlist(d, idcol = "id")
+d <- d[, trialnum := 1:.N, by = "id"]  ## make trial number column
+d <- separate(d, id, c("wave", "task", "session", "subj"))
+
+
+
+## bind with behavioral
+
+
+
+```
+
+
+TODO:
+2. generate behavioral files for DMCC2 and DMCC3 and copy to "in"
+
+```{r}
+
+
+
+```
+

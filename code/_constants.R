@@ -1,6 +1,6 @@
 ## system info
 
-n_cores <- parallel::detectCores()
+n_core <- parallel::detectCores()
 
 ## paths
 
@@ -36,29 +36,59 @@ dir_atlas <- "/data/nil-bluearc/ccp-hcp/DMCC_ALL_BACKUPS/ATLASES/"
 ## image, design, analysis info
 
 n_vert <- 20484  ## surface hcp mesh
+# n_trs <- c(
+#   Axcpt   = 1220,
+#   # Axcpt_proactive  = 1220,
+#   # Axcpt_reactive   = 1220,
+#   Cuedts  = 1300,
+#   # Cuedts_proactive = 1300,
+#   # Cuedts_reactive  = 1300,
+#   Stern   = 1200,
+#   # Stern_proactive  = 1200,
+#   # Stern_reactive   = 1200,
+#   Stroop  = 1080
+#   # Stroop_proactive = 1080,
+#   # Stroop_reactive  = 1180
+# )  ## FOR BASELINE/PROACTIVE SESSION ONLY
 n_trs <- c(
-  Axcpt   = 1220,
-  # Axcpt_proactive  = 1220,
-  # Axcpt_reactive   = 1220,
-  Cuedts  = 1300,
-  # Cuedts_proactive = 1300,
-  # Cuedts_reactive  = 1300,
-  Stern   = 1200,
-  # Stern_proactive  = 1200,
-  # Stern_reactive   = 1200,
-  Stroop  = 1080
-  # Stroop_proactive = 1080,
-  # Stroop_reactive  = 1180
-)
+  Axcpt_baseline   = 1220,
+  Axcpt_proactive  = 1220,
+  Axcpt_reactive   = 1220,
+  Cuedts_baseline  = 1300,
+  Cuedts_proactive = 1300,
+  Cuedts_reactive  = 1300,
+  Stern_baseline   = 1200,
+  Stern_proactive  = 1200,
+  Stern_reactive   = 1200,
+  Stroop_baseline  = 1080,
+  Stroop_proactive = 1080,
+  Stroop_reactive  = 1180
+)  ## BOTH RUNS INCLUDED
+n_trialspr <- c(
+  Axcpt_baseline = 72, 
+  Axcpt_proactive = 72, 
+  Axcpt_reactive = 72, 
+  Cuedts_baseline = 54, 
+  Cuedts_proactive = 54, 
+  Cuedts_reactive = 54, 
+  Stern_baseline = 45, 
+  Stern_proactive = 45, 
+  Stern_reactive = 45, 
+  Stroop_baseline = 108,
+  Stroop_proactive = 108,
+  Stroop_reactive = 120
+  )  ## number of trials (events) per subj*run
+
 
 tasks <- c("Axcpt", "Cuedts", "Stern", "Stroop")
 taskruns <- sort(combo_paste(tasks, c("run1", "run2")))
-
+sessions <- c("baseline", "proactive", "reactive")
+waves <- c("wave1", "wave2", "wave3")
+wavedir_image <- c("HCP_SUBJECTS_BACKUPS", "DMCC_Phase3")
+wavedir_evts <- c("DMCC2", "DMCC3", "DMCC4")
 
 subjs_ub55 <- data.table::fread(here::here("..", "ub55", "in", "ub55_subjects.txt"))[[1]]
-# subjs_test <- c()
-# subjs_retest <- c()
-
+subjs_wave12 <- fread(here("in", "subjects_wave12_complete_2021-09-01.txt"))$V1
 subjs_retest_tang <- c(
   "178243",
   "130518",
