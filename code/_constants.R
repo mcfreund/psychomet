@@ -81,7 +81,7 @@ n_trialspr <- c(
 
 
 tasks <- c("Axcpt", "Cuedts", "Stern", "Stroop")
-taskruns <- sort(combo_paste(tasks, c("run1", "run2")))
+taskruns <- sort(mikeutils::combo_paste(tasks, c("run1", "run2")))
 sessions <- c("baseline", "proactive", "reactive")
 waves <- c("wave1", "wave2", "wave3")
 wavedir_image <- c("HCP_SUBJECTS_BACKUPS", "DMCC_Phase3")
