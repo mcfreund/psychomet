@@ -45,13 +45,27 @@ source(here("code", "_read_behav.R"))
 
 
 fnames <- c(
-  "network_hilo" = here("out", "icc", "projs-trials_axis-hilo_cval-wthntsk_schaefer-network07_prew-none_stand-axes_center-pattern_resid-errts.RDS"),
-  "network_hilo_prw" = here("out", "icc", "projs-trials_axis-hilo_cval-wthntsk_schaefer-network07_prew-concat-runs-multi-alltask_stand-axes_center-pattern_resid-errts.RDS"),
-  "parcel_hilo"  = here("out", "icc", "projs-trials_axis-hilo_cval-wthntsk_schaefer-parcel_prew-none_stand-axes_center-pattern_resid-errts.RDS"),
-  "network_ons" = here("out", "icc", "projs-trials_axis-ons_cval-wthntsk_schaefer-network07_prew-none_stand-axes_center-none_resid-errts.RDS"),
-  "network_ons_prw" = here("out", "icc", "projs-trials_axis-ons_cval-wthntsk_schaefer-network07_prew-concat-runs-multi-alltask_stand-axes_center-none_resid-errts.RDS"),
-  "parcel_ons"  = here("out", "icc", "projs-trials_axis-ons_cval-wthntsk_schaefer-parcel_prew-none_stand-axes_center-none_resid-errts.RDS")
+  
+  network_hilo = 
+    "projs-trials_axis-hilo_cval-wthntsk_schaefer-network07_prew-none_stand-axes_center-pattern_resid-errts.RDS",
+  network_hilo_prw = 
+    "projs-trials_axis-hilo_cval-wthntsk_schaefer-network07_prew-concat-runs-multi-alltask_stand-axes_center-pattern_resid-errts.RDS",
+  parcel_hilo = 
+    "projs-trials_axis-hilo_cval-wthntsk_schaefer-parcel_prew-none_stand-axes_center-pattern_resid-errts.RDS",
+  parcel_hilo_prw = 
+    "projs-trials_axis-hilo_cval-wthntsk_schaefer-parcel_prew-concat-runs-multi-alltask_stand-axes_center-pattern_resid-errts.RDS",
+  
+  network_ons = 
+    "projs-trials_axis-ons_cval-wthntsk_schaefer-network07_prew-none_stand-axes_center-none_resid-errts.RDS",
+  network_ons_prw = 
+    "projs-trials_axis-ons_cval-wthntsk_schaefer-network07_prew-concat-runs-multi-alltask_stand-axes_center-none_resid-errts.RDS",
+  parcel_ons = 
+    "projs-trials_axis-ons_cval-wthntsk_schaefer-parcel_prew-none_stand-axes_center-none_resid-errts.RDS",
+  parcel_ons_prw = 
+    "projs-trials_axis-ons_cval-wthntsk_schaefer-parcel_prew-concat-runs-multi-alltask_stand-axes_center-none_resid-errts.RDS"
+  
 )
+fnames <- setNames(file.path(here("out", "icc"), fnames), names(fnames))
 
 cols <- c("subj", "task", "run", "trial.num", "trial.type", "acc")
 trialinfo <- behav %>% map(~ select(.x, all_of(cols))) %>% rbindlist
@@ -100,13 +114,14 @@ get_ons <- function(d) {
 
   d <- d[!is.na(value)]
   d_subj <- d[, .(value = mean(value)), by = c("subj", "task", "roi")]  ## aggregate
-
+  
+  gc()
   rename(d_subj, on = value)
 
 }
 
 
-get_hilo <- function(d) {
+get_hilo <- function(d, .by = c("subj", "task", "roi", "hilo")) {
 
   ## get hilo per task:
 
@@ -116,14 +131,14 @@ get_hilo <- function(d) {
   d[trialtype %in% lo]$hilo <- "lo"
 
   d_subj <-
-    d[hilo %in% c("hi", "lo"), .(value = mean(value)), by = c("subj", "task", "roi", "hilo")]  ## aggregate
-  d_subj <- dcast(d_subj, subj + task + roi ~ hilo)  ## to wide
+    d[hilo %in% c("hi", "lo"), .(value = mean(value)), by = .by]  ## aggregate
+  d_subj <- dcast(d_subj, ... ~ hilo)  ## to wide
   d_subj[, hi_v_lo := hi - lo]  ## get contrast
-
+  
+  gc()
   d_subj
 
 }
-
 
 # use_virtualenv("r-reticulate", required = TRUE)
 py_config()
@@ -268,7 +283,9 @@ d_subj_netw %>%
   scale_fill_brewer(type = "qual", palette = 2) +
   theme(legend.position = 'none') +
   
-  labs(y = "Mean ONs contrast (b)", x = "Network (Schaefer 7)")
+  labs(y = "Mean ONs contrast (b)", x = "Network (Schaefer 7)", title = "vanilla")
+
+
 
 
 d_subj_netw_prw %>%
@@ -285,7 +302,9 @@ d_subj_netw_prw %>%
   scale_fill_brewer(type = "qual", palette = 2) +
   theme(legend.position = 'none') +
   
-  labs(y = "Mean ONs contrast (b)", x = "Network (Schaefer 7)")
+  labs(y = "Mean ONs contrast (b)", x = "Network (Schaefer 7)", title = "prewhitened")
+
+
 
 
 d_subj_netw <- merge(d_subj_netw_prw, d_subj_netw, by = c("subj", "task", "roi"), suffix = c("_prw", "_van"))
@@ -296,7 +315,9 @@ d_subj_netw %>%
   ggplot(aes(roi, on, fill = variable)) +
   
   geom_hline(yintercept = 2) +
-  stat_summary(fun = function(x) t.test(x)$statistic, geom = "col", width = 0.5, position = position_dodge(width = 0.5)) +
+  stat_summary(
+    fun = function(x) t.test(x)$statistic, geom = "col", width = 0.5, position = position_dodge(width = 0.5)
+    ) +
   
   facet_grid(vars(task), scales = "free_y") +
   scale_fill_brewer(type = "qual", palette = 2) +
@@ -320,10 +341,24 @@ d_group_parc_on <- d_subj_parc_on[, .(tstat = t.test(on)$statistic, p = t.test(o
 d_group_parc_on[, p_fdr := p.adjust(p, "fdr"), by = task]  ## adjust p val
 d_group_parc_on[, roi_ind := match(roi, key_schaefer$parcel)]  ## bind indices
 
+
+
+d_subj_parc_on_prw <- get_trial_data("parcel_ons_prw") %>% get_ons
+
+## get parcel t-stats:
+
+d_group_parc_on_prw <- d_subj_parc_on_prw[, .(tstat = t.test(on)$statistic, p = t.test(on)$p.value), by = c("task", "roi")]
+d_group_parc_on_prw[, p_fdr := p.adjust(p, "fdr"), by = task]  ## adjust p val
+d_group_parc_on_prw[, roi_ind := match(roi, key_schaefer$parcel)]  ## bind indices
+
+# any(is_equal(d_subj_parc_on_prw$on, d_subj_parc_on$on))
+
 ```
 
 
 ## unthresholded
+
+### vanilla
 
 ```{python on_surf, warn = FALSE}
 
@@ -352,8 +387,38 @@ for task_i in range(len(r.tasks)):
 ```
 
 
+### prewhitened
+
+```{python on_surf_prw, warn = FALSE}
+
+for task_i in range(len(r.tasks)):
+  # task_i = 0
+  
+  ## get task:
+  
+  is_task_i = r.d_group_parc_on_prw.task == r.tasks[task_i]
+  d_on = r.d_group_parc_on_prw[is_task_i]
+  
+  ## get overlay: 
+
+  overlay_on_lh = get_overlay(d_on.roi_ind, d_on.tstat, "left")
+  overlay_on_rh = get_overlay(d_on.roi_ind, d_on.tstat, "right")
+  overlay_on = np.column_stack(np.stack((overlay_on_lh, overlay_on_rh)))
+  
+  ## plot:
+  
+  fig = plot_surf_roi_montage(roi_map = overlay_on, title = r.tasks[task_i])
+  plotting.show()
+  fig.clear()
+  plt.close('all')
+
+
+```
+
+
 ## thresholded
 
+### vanilla
 
 ```{python on_surf_thresh}
 
@@ -364,6 +429,37 @@ for task_i in range(len(r.tasks)):
 
   is_task_i = r.d_group_parc_on.task == r.tasks[task_i]
   d_on = r.d_group_parc_on[is_task_i]
+
+  ## get overlay:
+
+  d_on.loc[d_on['p_fdr'] > 0.05, 'tstat'] = 0
+
+  overlay_on_lh = get_overlay(d_on.roi_ind, d_on.tstat, "left")
+  overlay_on_rh = get_overlay(d_on.roi_ind, d_on.tstat, "right")
+  overlay_on = np.column_stack(np.stack((overlay_on_lh, overlay_on_rh)))
+
+  ## plot:
+
+  plot_surf_roi_montage(roi_map = overlay_on, title = r.tasks[task_i])
+  plotting.show()
+  fig.clear()
+  plt.close('all')
+
+
+```
+
+
+### prewhitened
+
+```{python on_surf_thresh_prw}
+
+for task_i in range(len(r.tasks)):
+  # task_i = 0
+
+  ## get task:
+
+  is_task_i = r.d_group_parc_on_prw.task == r.tasks[task_i]
+  d_on = r.d_group_parc_on_prw[is_task_i]
 
   ## get overlay:
 
@@ -419,6 +515,7 @@ d_subj_netw %>%
   labs(y = "Mean hi vs lo contrast (b)", x = "Network (Schaefer 7)")
 
 
+
 d_subj_netw_prw %>%
   
   ggplot(aes(roi, hi_v_lo)) +
@@ -433,7 +530,9 @@ d_subj_netw_prw %>%
   scale_fill_brewer(type = "qual", palette = 2) +
   theme(legend.position = 'none') +
 
-  labs(y = "Mean hi vs lo contrast (b)", x = "Network (Schaefer 7)")
+  labs(y = "Mean hi vs lo contrast (b)", x = "Network (Schaefer 7)", title = "prewhitened")
+
+
 
 
 d_subj_netw <- merge(d_subj_netw_prw, d_subj_netw, by = c("subj", "task", "roi"), suffix = c("_prw", "_van"))
@@ -444,7 +543,9 @@ d_subj_netw[, c("subj", "task", "roi", "hi_v_lo_prw", "hi_v_lo_van")] %>%
   ggplot(aes(roi, hi_v_lo, fill = variable)) +
   
   geom_hline(yintercept = 2) +
-  stat_summary(fun = function(x) t.test(x)$statistic, geom = "col", width = 0.5, position = position_dodge(width = 0.5)) +
+  stat_summary(
+    fun = function(x) t.test(x)$statistic, geom = "col", width = 0.5, position = position_dodge(width = 0.5)
+    ) +
   
   facet_grid(vars(task), scales = "free_y") +
   scale_fill_brewer(type = "qual", palette = 2) +
@@ -454,11 +555,11 @@ d_subj_netw[, c("subj", "task", "roi", "hi_v_lo_prw", "hi_v_lo_van")] %>%
   
 
 
-d_subj_netw[task %in% c("Axcpt", "Stroop"), c("subj", "task", "roi", "hi_v_lo_prw", "hi_v_lo_van")] %>%
-  # group_by(roi, subj) %>%
-  pivot_wider(id_cols = c("subj", "roi"), names_from = task, values_from = hi_v_lo_prw) %>%
-  group_by(roi) %>%
-  summarize(r = cor(Axcpt, Stroop))
+# d_subj_netw[task %in% c("Axcpt", "Stroop"), c("subj", "task", "roi", "hi_v_lo_prw", "hi_v_lo_van")] %>%
+#   # group_by(roi, subj) %>%
+#   pivot_wider(id_cols = c("subj", "roi"), names_from = task, values_from = hi_v_lo_prw) %>%
+#   group_by(roi) %>%
+#   summarize(r = cor(Axcpt, Stroop))
   # summarize(r = cor(Cuedts, Stern))
 
 ```
@@ -478,7 +579,9 @@ d_subj_parc_hilo[roi %in% key_schaefer[schaefermd]$parcel] %>%
   ggplot(aes(task, hi_v_lo, fill = task)) +
 
   geom_hline(yintercept = 2) +
-  stat_summary(fun = function(x) t.test(x)$statistic, geom = "col", width = 0.5, position = position_dodge(width = 0.5)) +
+  stat_summary(
+    fun = function(x) t.test(x)$statistic, geom = "col", width = 0.5, position = position_dodge(width = 0.5)
+    ) +
 
   facet_wrap(vars(roi)) +
   scale_fill_brewer(type = "qual", palette = 2) +
@@ -496,9 +599,45 @@ d_group_parc_hilo <- d_subj_parc_hilo[, .(tstat = t.test(hi_v_lo)$statistic, p =
 d_group_parc_hilo[, p_fdr := p.adjust(p, "fdr"), by = task]  ## adjust p val
 d_group_parc_hilo[, roi_ind := match(roi, key_schaefer$parcel)]  ## bind indices
 
+
+## prewhitened ----
+
+d_subj_parc_hilo_prw <- get_trial_data("parcel_hilo_prw") %>% get_hilo
+
+
+## plot MD parcels:
+
+d_subj_parc_hilo_prw[roi %in% key_schaefer[schaefermd]$parcel] %>%
+
+  ggplot(aes(task, hi_v_lo, fill = task)) +
+
+  geom_hline(yintercept = 2) +
+  stat_summary(
+    fun = function(x) t.test(x)$statistic, geom = "col", width = 0.5, position = position_dodge(width = 0.5)
+    ) +
+
+  facet_wrap(vars(roi)) +
+  scale_fill_brewer(type = "qual", palette = 2) +
+  theme(legend.position = 'none', axis.text.x = element_blank()) +
+
+  labs(y = "Mean hi vs lo contrast (t-stat)", title = "Schaeferized MMP-MD | prewhitened", x = "Task (alphabetical)")
+
+
+## plot surfaces
+
+## get parcel t-stats:
+
+d_group_parc_hilo_prw <- d_subj_parc_hilo_prw[, .(tstat = t.test(hi_v_lo)$statistic, p = t.test(hi_v_lo)$p.value),
+                                      by = c("task", "roi")]
+d_group_parc_hilo_prw[, p_fdr := p.adjust(p, "fdr"), by = task]  ## adjust p val
+d_group_parc_hilo_prw[, roi_ind := match(roi, key_schaefer$parcel)]  ## bind indices
+
+
 ```
 
 ## unthresholded
+
+### vanilla
 
 ```{python hilo_surf}
 
@@ -526,7 +665,39 @@ for task_i in range(len(r.tasks)):
 
 ```
 
+### prewhitened
+
+```{python hilo_surf_prw}
+
+for task_i in range(len(r.tasks)):
+  # task_i = 0
+
+  ## get task:
+
+  is_task_i = r.d_group_parc_hilo_prw.task == r.tasks[task_i]
+  d_hilo = r.d_group_parc_hilo_prw[is_task_i]
+
+  ## get overlay:
+
+  overlay_hilo_lh = get_overlay(d_hilo.roi_ind, d_hilo.tstat, "left")
+  overlay_hilo_rh = get_overlay(d_hilo.roi_ind, d_hilo.tstat, "right")
+  overlay_hilo = np.column_stack(np.stack((overlay_hilo_lh, overlay_hilo_rh)))
+
+  ## plot:
+
+  plot_surf_roi_montage(roi_map = overlay_hilo, title = r.tasks[task_i])
+  plotting.show()
+  fig.clear()
+  plt.close('all')
+
+
+```
+
+
 ## thresholded
+
+
+### vanilla
 
 ```{python hilo_surf_thresh}
 
@@ -556,7 +727,85 @@ for task_i in range(len(r.tasks)):
 
 ```
 
+### prewhitened
+
+```{python hilo_surf_thresh_prw}
+
+for task_i in range(len(r.tasks)):
+  # task_i = 0
+
+  ## get task:
+
+  is_task_i = r.d_group_parc_hilo_prw.task == r.tasks[task_i]
+  d_hilo = r.d_group_parc_hilo_prw[is_task_i]
+
+  ## get overlay:
+
+  d_hilo.loc[d_hilo['p_fdr'] > 0.05, 'tstat'] = 0
+
+  overlay_hilo_lh = get_overlay(d_hilo.roi_ind, d_hilo.tstat, "left")
+  overlay_hilo_rh = get_overlay(d_hilo.roi_ind, d_hilo.tstat, "right")
+  overlay_hilo = np.column_stack(np.stack((overlay_hilo_lh, overlay_hilo_rh)))
+
+  ## plot:
+
+  plot_surf_roi_montage(roi_map = overlay_hilo, title = r.tasks[task_i])
+  plotting.show()
+  fig.clear()
+  plt.close('all')
+
+
+```
 
 
 
+
+
+```{r eval = FALSE}
+
+d_subjrun_parc_hilo <- get_trial_data("parcel_hilo") %>% get_hilo(.by = c("subj", "task", "roi", "run", "hilo"))
+d_subjrun_parc_hilo_w <- d_subjrun_parc_hilo %>% 
+  select(-hi, -lo) %>% 
+  dcast(... ~ run, value.var = "hi_v_lo", prefix = "run_")
+
+d_r_parc_hilo <- d_subjrun_parc_hilo_w[, .(r = cor(`1`, `2`)), by = c("task", "roi")]
+
+# d_r_parc_hilo %>% arrange(-r)
+
+
+
+d_subjrun_parc_hilo_prw <- get_trial_data("parcel_hilo_prw") %>% get_hilo(.by = c("subj", "task", "roi", "run", "hilo"))
+d_subjrun_parc_hilo_prw_w <- d_subjrun_parc_hilo_prw %>% 
+  select(-hi, -lo) %>% 
+  dcast(... ~ run, value.var = "hi_v_lo", prefix = "run_")
+
+d_r_parc_hilo_prw <- d_subjrun_parc_hilo_prw_w[, .(r = cor(`1`, `2`)), by = c("task", "roi")]
+
+# d_r_parc_hilo_prw %>% arrange(-r)
+
+d_r_parc_hilo <- merge(d_r_parc_hilo, d_r_parc_hilo_prw, by = c("task", "roi"), suffix = c("_van", "_prw"))
+
+
+d_r_parc_hilo %>% 
+  
+  ggplot(aes(r_van, r_prw, color = ifelse(roi %in% key_schaefer$parcel[schaefermd], TRUE, FALSE))) +
+  
+  geom_abline() +
+  geom_point(shape = 16) +
+  # scale_fill_brewer(type = "qual", palette = 2) +
+  scale_color_manual(values = c("TRUE" = "firebrick2", "FALSE" = "black")) +
+  
+  facet_grid(cols = vars(task)) +
+  
+  scale_x_continuous(limits = c(-0.2, 1)) +
+  scale_y_continuous(limits = c(-0.2, 1)) +
+  
+  theme(legend.position = "none")
+  
+
+d_r_parc_hilo %>% arrange(-r_van) %>% View
+d_r_parc_hilo %>% arrange(-r_prw)
+
+
+```
 

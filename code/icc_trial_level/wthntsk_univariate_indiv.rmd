@@ -1,0 +1,304 @@
+---
+title: "Trial-level analyses: univariate means, split-half relibility"
+output:
+  html_document:
+    toc: true
+    toc_depth: 3
+    number_sections: true
+
+---
+
+
+# intro
+
+
+```{r setup, include = FALSE}
+
+## basics ----
+
+library(here)
+library(reticulate)
+library(tidyr)
+library(dplyr)
+library(magrittr)
+library(data.table)
+library(abind)
+library(doParallel)
+library(foreach)
+library(mikeutils)
+library(progress)
+library(ggplot2)
+library(grid)
+library(gridExtra)
+library(cowplot)
+library(viridis)
+library(purrr)
+
+theme_set(theme_half_open())
+
+source(here("code", "_constants.R"))
+source(here("code", "_atlases.R"))
+source(here("code", "_funs.R"))
+source(here("code", "_read_behav.R"))
+
+
+fnames <- c(
+  "network_errts" = here("out", "icc", "means-trials_schaefer-network07_resid-errts.RDS"),
+  "parcel_errts"  = here("out", "icc", "means-trials_schaefer-parcel_resid-errts.RDS")
+)
+
+cols <- c("subj", "task", "run", "trial.num", "trial.type", "acc")
+trialinfo <- behav %>% map(~ select(.x, all_of(cols))) %>% rbindlist
+
+## TODO:
+##  - edit trialinfo so that displays
+
+hi <- c("BX", "InCon", "RN")
+lo <- c("BY", "Con", "NN")
+
+set.seed(0)
+subjs_sample <- sample(subjs_ub55, 3)
+
+## functions ----
+
+
+get_trial_data <- function(name) {
+  
+  d <- readRDS(fnames[name])
+  d <- rename(d, trial.num = trial)
+  d <- merge(d, trialinfo, by = c("subj", "task", "run", "trial.num"))  ## bind just enough info
+  ## TOD add error checking for expansion --- mismatched trials
+  d
+}
+
+
+# get_ons <- function(d) {
+#   
+#   ## get 'ons' per task:
+#   
+#   d <- d[!is.na(value)]
+#   d_subj <- d[, .(value = mean(value)), by = c("subj", "task", "roi")]  ## aggregate
+# 
+#   rename(d_subj, on = value)
+#   
+# }
+
+
+# get_hilo <- function(d) {
+#   
+#   ## get hilo per task:
+#   
+#   d <- d[!is.na(value)]
+#   d$hilo <- as.character(NA)
+#   d[trial.type %in% hi]$hilo <- "hi"
+#   d[trial.type %in% lo]$hilo <- "lo"
+#   
+#   d_subj <- 
+#     d[hilo %in% c("hi", "lo"), .(value = mean(value)), by = c("subj", "task", "roi", "hilo")]  ## aggregate
+#   d_subj <- dcast(d_subj, subj + task + roi ~ hilo)  ## to wide
+#   d_subj[, hi_v_lo := hi - lo]  ## get contrast
+#   
+#   d_subj
+#   
+# }
+
+
+# use_virtualenv("r-reticulate", required = TRUE)
+py_config()
+
+# knitr::knit_engines$set(python = reticulate::eng_python)
+
+```
+
+
+
+# summary plots
+
+```{r}
+
+d_subj_netw <- get_trial_data("network_errts")
+d_subj_netw <- d_subj_netw[!is.na(value)]
+
+
+d_subj_netw %>%
+  
+  ggplot(aes(value)) +
+  geom_histogram(fill = "black", bins = 100) +
+  facet_grid(vars(roi), vars(task), scales = "free_x")
+
+
+d_subj_netw %>%
+  
+  ggplot(aes(trial.num, value, fill = run, alpha = 0.2)) +
+  geom_point(shape = 21) +
+  facet_grid(vars(roi), vars(task), scales = "free_x")
+
+
+d_subj_netw %>%
+  
+  ggplot(aes(trial.num, value, color = run)) +
+  stat_smooth(aes(group = run), method = "loess") +
+  facet_grid(vars(roi), vars(task), scales = "free_x")
+
+
+d_subj_netw$hilo <- as.character(NA)
+d_subj_netw[trial.type %in% hi]$hilo <- "hi"
+d_subj_netw[trial.type %in% lo]$hilo <- "lo"
+
+
+d_subj_netw %>%
+  
+  filter(!is.na(hilo), subj %in% subjs_ub55[1:5], task == "Axcpt") %>%
+  
+  ggplot(aes(trial.num, value)) +
+  
+  geom_hline(yintercept = 0) +
+  geom_line() +
+  geom_point(aes(group = as.factor(subj), color = hilo), size = 2) +
+  
+  scale_color_manual(values = c(hi = "firebrick2", lo = "grey40")) +
+  
+  facet_grid(vars(roi), vars(subj, run), scales = "free_x")
+
+
+
+d_subj_netw %>%
+  
+  filter(subj %in% subjs_sample, task == "Stroop") %>%
+  
+  ggplot(aes(trial.num, value)) +
+  
+  geom_hline(yintercept = 0) +
+  geom_line() +
+  geom_point(aes(group = as.factor(subj), color = hilo), size = 2) +
+  
+  scale_color_manual(values = c(hi = "firebrick2", lo = "grey40")) +
+  
+  facet_grid(vars(roi), vars(subj, run), scales = "free_x")
+
+
+d_subj_netw %>%
+  
+  filter(subj %in% subjs_sample, task == "Axcpt") %>%
+  
+  ggplot(aes(trial.num, roi)) +
+  geom_raster(aes(fill = value)) +
+  
+  facet_grid(vars(subj, run), scales = "free_x") +
+  scale_fill_viridis_c()
+
+
+d_subj_netw %>%
+  
+  filter(subj %in% subjs_sample, task == "Cuedts") %>%
+  
+  ggplot(aes(trial.num, roi)) +
+  geom_raster(aes(fill = value)) +
+  
+  facet_grid(vars(subj, run), scales = "free_x") +
+  scale_fill_viridis_c()
+
+
+
+```
+
+
+# summary stats
+
+```{r}
+
+d_subj_netw_sum <-
+  
+  d_subj_netw[!is.na(hilo), .(value = mean(value)), by = c("subj", "task", "roi", "run", "hilo")] %>%
+  dcast(... ~ hilo, value.var = "value") %>%
+  
+  mutate(hilo = hi - lo) %>%
+  select(-hi, -lo) %>%
+  dcast(... ~ run, value.var = "hilo")
+
+d_subj_netw_sum[, .(r = cor(`1`, `2`)), by = c("task", "roi")]
+
+
+
+d_subj_parc <- get_trial_data("parcel_errts")
+d_subj_parc <- d_subj_parc[!is.na(value)]
+d_subj_parc$hilo <- as.character(NA)
+d_subj_parc[trial.type %in% hi]$hilo <- "hi"
+d_subj_parc[trial.type %in% lo]$hilo <- "lo"
+
+
+d_subj_parc_sum <-
+  
+  d_subj_parc[!is.na(hilo), .(value = mean(value)), by = c("subj", "task", "roi", "run", "hilo")] %>%
+  dcast(... ~ hilo, value.var = "value") %>%
+  
+  mutate(hilo = hi - lo) %>%
+  select(-hi, -lo) %>%
+  dcast(... ~ run, value.var = "hilo")
+
+d_parc_r <- d_subj_parc_sum[, .(r = cor(`1`, `2`)), by = c("task", "roi")]
+
+d_parc_r %>%
+  
+  ggplot(aes(task, r)) +
+  
+  geom_boxplot()
+
+
+```
+
+
+```{r}
+
+library(lme4)
+
+## prep for model
+
+d_subj_parc_hilo <- d_subj_parc[!is.na(hilo), ]
+d_subj_parc_hilo$hilo <- factor(d_subj_parc_hilo$hilo, levels = c("lo", "hi"))
+contrasts(d_subj_parc_hilo$hilo) <- c(-1/2, 1/2)
+d_subj_parc_hilo$run <- factor(d_subj_parc_hilo$run)
+
+X <- model.matrix(~ hilo, d_subj_parc_hilo)
+X1 <- apply(X, 2, function(x) x * (1 - dummy(d_subj_parc_hilo$run)))  ## run 1
+X2 <- apply(X, 2, function(x) x * dummy(d_subj_parc_hilo$run))  ## run 2
+X <- cbind(X1, X2)
+colnames(X) <- c("mean1", "hilo1", "mean2", "hilo2")
+
+d_subj_parc_hilo <- cbind(d_subj_parc_hilo, X)
+
+# d <- d_subj_parc_hilo[roi %in% key_schaefer$parcel[schaefermd], .(value = mean(value)), 
+#                         by = c("subj", "task", "run", "trial.num", "trial.type", "acc", "hilo")]
+
+
+d_subj_parc_hilo_i <- d_subj_parc_hilo
+
+l <- split(d_subj_parc_hilo_i, d_subj_parc_hilo_i$roi)
+m <- lapply(l, function(x) {
+  lmer(
+    value ~ 0 + mean1 + mean2 + hilo1 + hilo2 + (0 + mean1 + mean2 | subj) + (0 +  hilo1 + hilo2 | subj), 
+    x
+  )
+  })
+
+# lapply(m, VarCorr)
+
+messages <- lapply(m, function(x) x@optinfo$conv$lme4$messages)
+is_nonsing <- which(vapply(messages, is.null, is.logical(1)))
+lapply(m[is_nonsing], VarCorr)
+# lapply(m[is_nonsing], summary)
+
+
+# m <- lmer(
+#   value ~ 0 + mean1 + mean2 + hilo1 + hilo2 + (1 | subj), d_i
+# )
+# summary(m)
+# m1 <- lmer(
+#   value ~ 0 + mean1 + mean2 + hilo1 + hilo2 + (0 + mean1 + mean2 || subj) + (0 +  hilo1 + hilo2 | subj), 
+#   d_i[task == "Stern"]
+# )
+# summary(m1)
+# VarCorr(m1)
+
+```
+
