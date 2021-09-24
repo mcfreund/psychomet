@@ -1,9 +1,0 @@
-*+ WARNING: -matrix file is missing Stim attributes:
-*+ WARNING:  ==> bucket dataset output is disabled
-*+ WARNING:  ==> -nobout is disabled
-** ERROR: output dataset name 'stats_var_DMCC2609759_R_REML.func.gii' conflicts with existing file
-** ERROR: dataset NOT written to disk!
-** ERROR: output dataset name 'errts_DMCC2609759_R_REML.func.gii' conflicts with existing file
-** ERROR: dataset NOT written to disk!
-** ERROR: output dataset name 'wherr_DMCC2609759_R_REML.func.gii' conflicts with existing file
-** ERROR: dataset NOT written to disk!
