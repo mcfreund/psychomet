@@ -1,0 +1,29 @@
+++ 3dDeconvolve extending num_stimts from 0 to 6 due to -ortvec
+++ 3dDeconvolve: AFNI version=AFNI_18.3.16 (Dec 11 2018) [64-bit]
+++ Authored by: B. Douglas Ward, et al.
+++ forcibly using TR=1.2000 seconds for -input dataset
+++ Auto-catenated input datasets treated as multiple imaging runs
+++ Auto-catenated datasets start at:  0 600
+++ Skipping check for initial transients
+++ Imaging duration=720.0 s; Automatic polort=5
+++ Number of time points: 1200 (no censoring)
+ + Number of parameters:  18 [18 baseline ; 0 signal]
+++ Memory required for output bricks = 40,968 bytes (about 41 thousand [kilo])
+++ Wrote matrix image to file /data/nil-external/ccp/freund/psychomet/out/glms/393550/RESULTS/Stern/reactive_null_2rpm_wave2/X.jpg
+++ Wrote matrix values to file /data/nil-external/ccp/freund/psychomet/out/glms/393550/RESULTS/Stern/reactive_null_2rpm_wave2/X.xmat.1D
+++ ========= Things you can do with the matrix file =========
+++ (a) Linear regression with ARMA(1,1) modeling of serial correlation:
+
+3dREMLfit -matrix /data/nil-external/ccp/freund/psychomet/out/glms/393550/RESULTS/Stern/reactive_null_2rpm_wave2/X.xmat.1D \
+ -input "/data/nil-bluearc/ccp-hcp/DMCC_ALL_BACKUPS/DMCC_Phase3/fMRIPrep_AFNI_ANALYSIS/393550/INPUT_DATA/Stern/reactive/lpi_scale_tfMRI_SternRea1_AP_L.func.gii /data/nil-bluearc/ccp-hcp/DMCC_ALL_BACKUPS/DMCC_Phase3/fMRIPrep_AFNI_ANALYSIS/393550/INPUT_DATA/Stern/reactive/lpi_scale_tfMRI_SternRea2_PA_L.func.gii" \
+ -verb
+ 
+++ N.B.: 3dREMLfit command above written to file 3dDeconvolve.REML_cmd
+++ (b) Visualization/analysis of the matrix via ExamineXmat.R
+++ (c) Synthesis of sub-model datasets using 3dSynthesize
+++ ==========================================================
+++ ----- Signal+Baseline matrix condition [X] (1200x18):  4.23946  ++ VERY GOOD ++
+++ ----- Baseline-only matrix condition [X] (1200x18):  4.23946  ++ VERY GOOD ++
+++ ----- stim_base-only matrix condition [X] (1200x6):  2.31034  ++ VERY GOOD ++
+++ ----- polort-only matrix condition [X] (1200x12):  1.00908  ++ VERY GOOD ++
+++ 3dDeconvolve exits: -x1D_stop option was invoked
