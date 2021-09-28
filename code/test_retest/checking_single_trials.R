@@ -34,6 +34,7 @@ subjs <- subjs_wave12
 do_waves <- c(1, 2)
 hi <- c(Axcpt = "BX", Cuedts = "InConInc", Stern = "LL5RN", Stroop = "biasInCon")
 lo <- c(Axcpt = "BY", Cuedts = "ConInc", Stern = "LL5NN", Stroop = "biasCon")
+waves <- waves[do_waves]
 
 
 ## wrangle behavioral data:
@@ -55,155 +56,152 @@ behav_wave12[session == "rea"]$session <- "reactive"
 
 ## execute ----
 
-waves <- waves[do_waves]
+
+fn <- here("out", "icc", "trial-level-recovery_hilo_core32_wave12.csv")
 
 
-# wave_i = 2
-# task_i = 3
-# session_i = 2
-# task_val <- tasks[task_i]
-# wave_val <- waves[wave_i]
-# session_val <- sessions[session_i]
-
-
-res <- enlist(combo_paste(waves, tasks, sessions))
-for (wave_i in seq_along(waves)) {
+if (file.exists(fn)) {
   
-  for (task_i in seq_along(tasks)) {
+  d <- fread(here("out", "icc", "trial-level-recovery_hilo_core32_wave12.csv"))
+  
+} else {
+  
+  # wave_i = 2
+  # task_i = 3
+  # session_i = 2
+  # task_val <- tasks[task_i]
+  # wave_val <- waves[wave_i]
+  # session_val <- sessions[session_i]
+
+  
+  res <- enlist(combo_paste(waves, tasks, sessions))
+  for (wave_i in seq_along(waves)) {
     
-    for (session_i in seq_along(sessions)) {
-     
+    for (task_i in seq_along(tasks)) {
       
-      task_val <- tasks[task_i]
-      wave_val <- waves[wave_i]
-      session_val <- sessions[session_i]
-      trialtype_val <- c(hi = hi[[task_val]], lo = lo[[task_val]])
-      
-      
-      ## read trial-level residuals, condition-level betas
-      
-      resid <- read_results(
-        wave_val, task_val, session_val, subjs,
-        glmname = "null_2rpm", filename = "errts_trials_target_epoch.RDS",
-        readRDS
-      )
-      names(resid) <- gsub(paste0(wave_val, "_", task_val, "_", session_val, "_"), "", names(resid))
-      
-      betas <- read_betas_dmcc(
-        .subjs = subjs, 
-        .task = task_val, 
-        .glm = paste0(session_val, "_", name_glms_dmcc[task_val]), 
-        .dir = file.path("/data/nil-bluearc/ccp-hcp/DMCC_ALL_BACKUPS", wavedir_image[wave_val], "fMRIPrep_AFNI_ANALYSIS")
-      )
-      
-      
-      ## extract core32
-      
-      is_core32 <- schaefer10k %in% core32
-      resid <- lapply(resid, function(x) x[, is_core32])
-      betas <- betas[is_core32, , , ]
-      
-      
-      ## aggregate over trials by trial-type
-      
-      l <- 
-        behav_wave12[wave == wave_val & task == task_val & session == session_val] %>% 
-        split(.$subj)
-      
-      A <- 
-        lapply(
-          l, 
-          function(x) {
-            A <- model.matrix(~ 0 + trialtype, x)
-            A <- sweep(A, 2, colSums(A), "/")
-            colnames(A) <- gsub("trialtype", "", colnames(A))
-            A[, trialtype_val] %*% rbind(1, -1)  ## gives hilo contrast
+      for (session_i in seq_along(sessions)) {
+       
+        
+        task_val <- tasks[task_i]
+        wave_val <- waves[wave_i]
+        session_val <- sessions[session_i]
+        trialtype_val <- c(hi = hi[[task_val]], lo = lo[[task_val]])
+        
+        
+        ## read trial-level residuals, condition-level betas
+        
+        resid <- read_results(
+          wave_val, task_val, session_val, subjs,
+          glmname = "null_2rpm", filename = "errts_trials_target_epoch.RDS",
+          readRDS
+        )
+        names(resid) <- gsub(paste0(wave_val, "_", task_val, "_", session_val, "_"), "", names(resid))
+        
+        betas <- read_betas_dmcc(
+          .subjs = subjs, 
+          .task = task_val, 
+          .glm = paste0(session_val, "_", name_glms_dmcc[task_val]), 
+          .dir = file.path(
+            "/data/nil-bluearc/ccp-hcp/DMCC_ALL_BACKUPS", wavedir_image[wave_val], "fMRIPrep_AFNI_ANALYSIS"
+            )
+        )
+        
+        
+        ## extract core32 etc...
+        
+        is_core32 <- schaefer10k %in% core32
+        resid32 <- lapply(resid, function(x) x[, is_core32])
+        betas32 <- betas[is_core32, trialtype_val, target_trs[[task_val]], ]
+        rm(resid, betas)
+        gc()
+        
+        
+        ## residuals: get hilo contrast
+        
+        l <- 
+          behav_wave12[wave == wave_val & task == task_val & session == session_val] %>% 
+          split(.$subj)
+        
+        A <- 
+          lapply(
+            l, 
+            function(x) {
+              A <- model.matrix(~ 0 + trialtype, x)
+              A <- sweep(A, 2, colSums(A), "/")
+              colnames(A) <- gsub("trialtype", "", colnames(A))
+              A[, trialtype_val] %*% rbind(1, -1)  ## gives hilo contrast
             }
-          )
-      
-      resid <- resid[names(A)]  ## make sure have same order
-      
-      resid_sum <- map2(A, resid, ~crossprod(.x, .y))
-      #resid_sum <- map2(A, resid, ~as.data.table(crossprod(.x, .y), keep.rownames = "trialtype"))
-      # resid_sum <- rbindlist(resid_sum, idcol = "subj")
-      # resid_sum_d <- melt(resid_sum, id.vars = c("subj", "trialtype"), variable.name = "vertex")
-      # resid_sum_d[, trialtype := gsub("trialtype", "", trialtype)]
-      resid_sum <- abind(resid_sum, along = 1)
-      
-      
-      # ## average trial-level residuals by trial-type
-      # 
-      # resid_d <- as.data.table(reshape2::melt(resid, varnames = c("trialnum", "vertex")))
-      # resid_d[, subj := gsub(paste0(wave_val, "_", task_val, "_", session_val, "_"), "", L1)]  ## create subj col
-      # 
-      # l <- behav_wave12[wave == wave_val & task == task_val & session == session_val]
-      # resid_d <- merge(resid_d, l, by = c("subj", "trialnum"))
-      # 
-      # resid_sum <- resid_d[, .(value = mean(value)), by = c("subj", "vertex", "trialtype")]
-      
-      
-      
-      ## extract target knots and average betas:
-      
-      b <- betas[, trialtype_val, target_trs[[task_val]], ]
-      
-      b <- aperm(b, c(1, 2, 4, 3))  ## put TR on 'outside'
-      b <- rowMeans(b, dims = 3)
-      b <- b[, trialtype_val["hi"], ] - b[, trialtype_val["lo"], ]
-      # b <- as.data.table(reshape2::melt(b))
-      # b <- rename(b, trialtype = reg)
-      # b <- b[, vertex := paste0("V", vertex)]
-      
-      
-      
-      ## bind and correlate:
-      resid_sum <- t(resid_sum)
-      
-      r <- colSums(scale2unit(meancenter(resid_sum)) * scale2unit(meancenter(b)))
-      neg_rmse <- -sqrt(colMeans((resid_sum - b) * (resid_sum - b)))
-
-      # d <- merge(resid_sum_d, b, by = c("vertex", "trialtype", "subj"))
-      # r <- d[,
-      #   .(
-      #     r = cor(value.x, value.y),
-      #     neg_mse = -sqrt(mean((value.x - value.y)^2))
-      #     ),
-      #   by = c("trialtype", "subj")
-      #   ]
-      
-      nm <- paste0(wave_val, "_", task_val, "_", session_val)
-      res[[nm]] <- data.table(subj = colnames(b), r = r, neg_rmse = neg_rmse)
-      
-      print(nm)
-
+            )
+        resid32 <- resid32[names(A)]  ## make sure have same order
+        
+        resid_sum <- map2(A, resid32, ~crossprod(.x, .y))
+        resid_sum <- abind(resid_sum, along = 1)
+        
+        
+        ## betas: get hilo contrast
+        
+        betas32 <- aperm(betas32, c(1, 2, 4, 3))  ## put TR on 'outside'
+        
+        b <- rowMeans(betas32, dims = 3)
+        b <- b[, trialtype_val["hi"], ] - b[, trialtype_val["lo"], ]
+        
+        
+        ## correlate:
+        
+        resid_sum <- t(resid_sum)
+        
+        r <- colSums(scale2unit(meancenter(resid_sum)) * scale2unit(meancenter(b)))  ## linear corr
+        neg_rmse <- -sqrt(colMeans((resid_sum - b) * (resid_sum - b)))  ## negative root mean square
+        
+        nm <- paste0(wave_val, "_", task_val, "_", session_val)
+        res[[nm]] <- data.table(subj = colnames(b), r = r, neg_rmse = neg_rmse)
+        
+        print(nm)
+  
+        
+      }
       
     }
     
   }
   
+  
+  
+  d <- rbindlist(res, idcol = "id")
+  d <- separate(d, id, c("wave", "task", "session"))
+  
+  fwrite(d, here("out", "icc", "trial-level-recovery_hilo_core32_wave12.csv"))
+  
 }
-
-
-# res <- res[-grep("wave3", names(res))]
-
-
-r <- rbindlist(res, idcol = "id")
-r <- separate(r, id, c("wave", "task", "session"))
-
 
 
 ## plot ----
 
 
-r %>%
-  ggplot(aes(r, trialtype)) +
-  geom_vline(xintercept = 0) +
-  geom_boxplot(width = 0.2, fill = "grey40") +
-  facet_wrap(vars(task), ncol = 1, scales = "free_y")
+p_cor_box <- d %>%
+  
+  mutate(wave = as.factor(ifelse(wave == "wave1", 1, 2))) %>%
+  
+  ggplot(aes(wave, r)) +
+  geom_boxplot(width = 0.25, fill = "grey40") +
+  facet_wrap(
+    vars(task, session), nrow = 1, 
+    labeller = labeller(
+      session = c(baseline = "bas", proactive = "pro", reactive = "rea")
+      )
+    ) +
+  labs(y = "linear correlation") +
+  theme(strip.background = element_blank())
+
+ggsave(here("out", "icc", "figs", "recovery_box_cor_hilo_core32.pdf"), p_cor_box, dev = "pdf", width = 7, height = 4)
 
 
-r %>%
+p_cor_box_subj <- d %>%
   ggplot(aes(r, subj)) +
-  geom_vline(xintercept = 0) +
-  geom_boxplot(width = 0.2, fill = "grey40") +
-  facet_wrap(vars(task), ncol = 1)
+  geom_boxplot(width = 0.2, fill = "grey40")
+
+ggsave(
+  here("out", "icc", "figs", "recovery_box_subj_cor_hilo_core32.pdf"), 
+  p_cor_box_subj, 
+  dev = "pdf", width = 4.5, height = 5
+  )

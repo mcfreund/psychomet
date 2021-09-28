@@ -39,8 +39,8 @@ behav <- map2(behav_wave1, behav_wave2, ~(rbind(.x, .y, idcol = "wave")))
 behav$Cuedts[trial.type == "i"]$trial.type <- "InCon"
 behav$Cuedts[trial.type == "c"]$trial.type <- "Con"
 
-behav$Cuedts[incentive == "incentive"]$incentive <- "Inc"
-behav$Cuedts[incentive == "nonincentive"]$incentive <- "NoInc"
+behav$Cuedts[target.color.orig == "green"]$incentive <- "Inc"
+behav$Cuedts[target.color.orig == "black"]$incentive <- "NoInc"
 
 behav$Cuedts$trialtype <- paste0(behav$Cuedts$trial.type, behav$Cuedts$incentive)
 
