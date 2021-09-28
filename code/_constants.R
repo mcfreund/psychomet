@@ -84,8 +84,8 @@ tasks <- c("Axcpt", "Cuedts", "Stern", "Stroop")
 taskruns <- sort(mikeutils::combo_paste(tasks, c("run1", "run2")))
 sessions <- c("baseline", "proactive", "reactive")
 waves <- c("wave1", "wave2", "wave3")
-wavedir_image <- c("HCP_SUBJECTS_BACKUPS", "DMCC_Phase3")
-wavedir_evts <- c("DMCC2", "DMCC3", "DMCC4")
+wavedir_image <- c(wave1 = "HCP_SUBJECTS_BACKUPS", wave2 = "DMCC_Phase3", wave3 = "DMCC_Phase4")
+wavedir_evts <- c(wave1 = "DMCC2", wave2 = "DMCC3", wave3 = "DMCC4")
 
 subjs_ub55 <- data.table::fread(here::here("..", "ub55", "in", "ub55_subjects.txt"))[[1]]
 subjs_wave12 <- fread(here("in", "subjects_wave12_complete_2021-09-01.txt"))$V1
@@ -106,6 +106,14 @@ subjs_retest_tang <- c(
   "DMCC9441378",
   "DMCC6705371"
 )
+
+name_glms_dmcc <- c(
+  Axcpt = "Cues_EVENTS_censored",
+  Cuedts = "CongruencyIncentive_EVENTS_censored",
+  Stern = "ListLength_EVENTS_censored",
+  Stroop = "Congruency_EVENTS_censored"
+)
+
 
 ## TRs of interest
 
