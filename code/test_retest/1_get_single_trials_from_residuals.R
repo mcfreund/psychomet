@@ -224,9 +224,6 @@ stopCluster(cl)
 
 
 
-## misc spot checks ----
-
-
 
 ## <<<<<< BEGIN CHECKING DUMMY MATRIX >>>>>>
 
