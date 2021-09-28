@@ -34,5 +34,32 @@ behav_wave2 <- lapply(behav_wave2, function(x) x[subj %in% subjs_wave12])
 behav <- map2(behav_wave1, behav_wave2, ~(rbind(.x, .y, idcol = "wave")))
 
 
+## format cols:
 
-map2(behav_wave2, here("in", "behav", paste0("behavior-and-events_wave12_", tasks, ".csv")), fwrite)
+behav$Cuedts[trial.type == "i"]$trial.type <- "InCon"
+behav$Cuedts[trial.type == "c"]$trial.type <- "Con"
+
+behav$Cuedts[incentive == "incentive"]$incentive <- "Inc"
+behav$Cuedts[incentive == "nonincentive"]$incentive <- "NoInc"
+
+behav$Cuedts$trialtype <- paste0(behav$Cuedts$trial.type, behav$Cuedts$incentive)
+
+
+behav$Stroop[trial.type == "i"]$trial.type <- "InCon"
+behav$Stroop[trial.type == "c"]$trial.type <- "Con"
+
+behav$Stroop[pc %in% c("mi", "mc")]$pc <- "bias"
+behav$Stroop[pc == "pc50"]$pc <- "PC50"
+
+behav$Stroop$trialtype <- paste0(behav$Stroop$pc, behav$Stroop$trial.type)
+
+
+behav$Stern$trialtype <- paste0(ifelse(behav$Stern$load == 5, "LL5", "not5"), behav$Stern$trial.type)
+
+behav$Axcpt <- rename(behav$Axcpt, trialtype = trial.type)
+
+
+
+## write:
+
+map2(behav, here("in", "behav", paste0("behavior-and-events_wave12_", tasks, ".csv")), fwrite)
