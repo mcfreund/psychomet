@@ -146,6 +146,88 @@ for (wave_i in seq_along(waves)) {
 
 
 
+
+# name_subj_i <- subjs[subj_i]
+# name_wave_i <- waves[wave_i]
+# name_task_i <- tasks[task_i]
+
+cl <- makeCluster(n_core / 2)
+registerDoParallel(cl)
+res <- foreach(
+  subj_i = seq_along(subjs),
+  .final = function(x) setNames(x, subjs),
+  .verbose = TRUE,
+  .packages = c("data.table", "here", "mikeutils")
+) %dopar% {
+
+# for (subj_i in seq_along(subjs)) {
+  
+  name_subj_i <- subjs[subj_i]
+  
+  for (wave_i in seq_along(waves)) {
+    
+    name_wave_i <- waves[wave_i]
+  
+    for (task_i in seq_along(tasks)) {
+      
+      name_task_i <- tasks[task_i]
+      
+      for (session_i in seq_along(sessions)) {
+        
+        
+        
+        ## get constants, averaging matrix:
+        
+        name_session_i <- sessions[session_i]
+        name_glm <- paste0(name_session_i, "_", "null_2rpm_", waves[wave_i])
+        
+        dir_glm <- here("out", "glms", name_subj_i, "RESULTS", name_task_i, name_glm)
+        
+        n_tr <- n_trs[paste0(name_task_i, "_", name_session_i)]
+        n_trial <- n_trialspr[paste0(name_task_i, "_", name_session_i)]*2
+        
+        nm <- paste0(waves[wave_i], "_", name_task_i, "_", name_session_i, "_", subjs[subj_i])
+        A <- A_list[[nm]]
+        
+        
+        ## load data:
+        
+        eps_name <- here(dir_glm, paste0(resid_type, "_", name_subj_i, "_", c("L", "R"), "_REML.func.gii"))  ## L, R
+        if (any(!file.exists(eps_name))) stop("no file!")
+        
+        E <- cbind(read_gifti2matrix(eps_name[1]), read_gifti2matrix(eps_name[2]))  ## L, R
+        
+        dims_bad <- any(dim(E) != c(n_tr, n_vert))
+        if (dims_bad) stop ("bad dims: error time-series")
+        
+        ## average and save:
+        
+        B <- crossprod(A, E)  ## trial by vertex matrix B
+        # image(B)
+        saveRDS(B, here(dir_glm, paste0(resid_type, "_trials_target_epoch.RDS")))
+        
+        
+        
+      }
+      
+    }
+    
+  }
+  
+}
+stopCluster(cl)
+
+
+
+
+
+
+
+
+## misc spot checks ----
+
+
+
 ## <<<<<< BEGIN CHECKING DUMMY MATRIX >>>>>>
 
 # read in design matrices (all subjs):
@@ -235,80 +317,4 @@ for (wave_i in seq_along(waves)) {
 
 
 ## <<<<<< END CHECKING WITH PREVIOUS IMPLEMENTATION >>>>>>
-
-
-
-
-# name_subj_i <- subjs[subj_i]
-# name_wave_i <- waves[wave_i]
-# name_task_i <- tasks[task_i]
-
-cl <- makeCluster(n_core / 2)
-registerDoParallel(cl)
-res <- foreach(
-  subj_i = seq_along(subjs),
-  .final = function(x) setNames(x, subjs),
-  .verbose = TRUE,
-  .packages = c("data.table", "here", "mikeutils")
-) %dopar% {
-
-# for (subj_i in seq_along(subjs)) {
-  
-  name_subj_i <- subjs[subj_i]
-  
-  for (wave_i in seq_along(waves)) {
-    
-    name_wave_i <- waves[wave_i]
-  
-    for (task_i in seq_along(tasks)) {
-      
-      name_task_i <- tasks[task_i]
-      
-      for (session_i in seq_along(sessions)) {
-        
-        
-        
-        ## get constants, averaging matrix:
-        
-        name_session_i <- sessions[session_i]
-        name_glm <- paste0(name_session_i, "_", "null_2rpm_", waves[wave_i])
-        
-        dir_glm <- here("out", "glms", name_subj_i, "RESULTS", name_task_i, name_glm)
-        
-        n_tr <- n_trs[paste0(name_task_i, "_", name_session_i)]
-        n_trial <- n_trialspr[paste0(name_task_i, "_", name_session_i)]*2
-        
-        nm <- paste0(waves[wave_i], "_", name_task_i, "_", name_session_i, "_", subjs[subj_i])
-        A <- A_list[[nm]]
-        
-        
-        ## load data:
-        
-        eps_name <- here(dir_glm, paste0(resid_type, "_", name_subj_i, "_", c("L", "R"), "_REML.func.gii"))  ## L, R
-        if (any(!file.exists(eps_name))) stop("no file!")
-        
-        E <- cbind(read_gifti2matrix(eps_name[1]), read_gifti2matrix(eps_name[2]))  ## L, R
-        
-        dims_bad <- any(dim(E) != c(n_tr, n_vert))
-        if (dims_bad) stop ("bad dims: error time-series")
-        
-        ## average and save:
-        
-        B <- crossprod(A, E)  ## trial by vertex matrix B
-        # image(B)
-        saveRDS(B, here(dir_glm, paste0(resid_type, "_trials_target_epoch.RDS")))
-        
-        
-        
-      }
-      
-    }
-    
-  }
-  
-}
-stopCluster(cl)
-
-
-
 
