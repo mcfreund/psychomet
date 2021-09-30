@@ -29,19 +29,66 @@ library(gridExtra)
 library(cowplot)
 library(viridis)
 library(purrr)
+library(psych)
+library(lme4)
+library(brms)
 
 theme_set(theme_half_open())
 
 source(here("code", "_constants.R"))
 source(here("code", "_atlases.R"))
 source(here("code", "_funs.R"))
-source(here("code", "_read_behav.R"))
+source(here("code", "_read_behav_wave12.R"))
 
-hi <- c("BX", "InCon", "RN")
-lo <- c("BY", "Con", "NN")
-
+hi <- c(Axcpt = "BX", Cuedts = "InConInc", Stern = "LL5RN", Stroop = "biasInCon")
+lo <- c(Axcpt = "BY", Cuedts = "ConInc", Stern = "LL5NN", Stroop = "biasCon")
 
 subjs <- subjs_wave12
+
+
+icc <- function(x, nms, type, ...) {
+  
+  res <- ICC(x[, ..nms], ...)$results
+  res[res$type == type, "ICC"]
+}
+
+
+pull_fixef <- function(x, nms = c("term", "b", "se", "tstat")) {
+  
+  res <- coef(summary(x))
+  res <- cbind(rownames(res), data.table(res))
+  names(res) <- nms
+  
+  res
+  
+}
+
+
+
+pull_trcor <- function(x) attr(VarCorr(x)$subj.1, "correlation")[2, 1]
+
+
+
+## bind behavior into single dt:
+
+behav_wave12$Axcpt <- rename(behav_wave12$Axcpt, rt = target.rt)
+behav_wave12 <- lapply(behav_wave12, function(x) x[session == "bas"])
+cols <- c("wave", "run", "session", "subj", "trialtype", "rt", "acc", "trial.num")
+behav_wave12 <- lapply(behav_wave12, function(x) x[, ..cols])
+
+behav_wave12 <- rbindlist(behav_wave12, idcol = "task")
+
+behav_wave12 <- behav_wave12[order(wave, task, session, subj, run, trial.num), ]
+behav_wave12[, trialnum := 1:.N, by = c("wave", "task", "subj", "session")]
+behav_wave12[, c("run", "trial.num") := NULL]
+behav_wave12[, wave := paste0("wave", wave)]
+
+behav_wave12[session == "bas"]$session <- "baseline"
+behav_wave12[session == "pro"]$session <- "proactive"
+behav_wave12[session == "rea"]$session <- "reactive"
+
+behav_wave12 <- behav_wave12[session == "baseline"]
+
 
 
 ## read data
@@ -54,22 +101,637 @@ d <- read_results(
 d <- rbindlist(d, idcol = "id")
 d <- d[, trialnum := 1:.N, by = "id"]  ## make trial number column
 d <- separate(d, id, c("wave", "task", "session", "subj"))
+d <- d[session == "baseline"]
 
 
 
-## bind with behavioral
+## bind with data:
+
+d <- merge(d, behav_wave12, by = c("task", "wave", "subj", "trialnum"))
+
+
+
+## reorder cols:
+
+# trial_cols <- c("subj", "wave", "task", "trialtype", "trialnum", "rt", "acc")
+rois <- key_schaefer$parcel
+# cols <- c(trial_cols, rois)
+# d <- d[, ..cols]
+
+
+## make hilo column:
+
+d$hilo <- ifelse(d$trialtype %in% hi, "hi", ifelse(d$trialtype %in% lo, "lo", NA))
+
+
+## remove missing trials:
+
+d <- d[!is.na(rowSums(d[, ..rois])), ]
+
+
+```
+
+
+
+## summary stats
+
+
+```{r}
+
+## aggregate over trials and re-format for correlation:
+
+d_sum <- d[!is.na(hilo), lapply(.SD, mean), by = c("subj", "wave", "task", "hilo"), .SDcols = key_schaefer$parcel]
+d_sum <-
+  melt(d_sum, id.cols = c("subj", "task", "hilo"), measure.vars = key_schaefer$parcel, variable.name = "roi")
+d_sum <- dcast(d_sum, subj + wave + task + roi ~ hilo, value.var = "value")
+d_sum$hilo <- d_sum$hi - d_sum$lo
+d_sum <- dcast(d_sum, subj + task + roi ~ wave, value.var = "hilo")
+
+## estimate:
+
+r_sum <- d_sum[,
+      .(
+        r = cor(wave1, wave2), 
+        rho = cor(wave1, wave2, method = "spearman"),
+        icc2 = icc(.SD, nms = c("wave1", "wave2"), type = "ICC2", lmer = FALSE),
+        icc3 = icc(.SD, nms = c("wave1", "wave2"), type = "ICC3", lmer = FALSE)
+        ),
+      by = c("task", "roi")]
+
+
+r_sum[, is_core32 := roi %in% rois[core32]]
+
+r_sum %>%
+  group_by(task, is_core32) %>%
+  summarize(
+    icc_mu = mean(icc),
+    icc_sd = sd(icc),
+    icc_d = icc_mu/icc_sd
+  ) %>%
+  
+  ggplot(aes(task, icc_d)) +
+  geom_col(aes(fill = is_core32), position = position_dodge(width = 0.5), width = 0.5, color = "black") +
+  scale_fill_manual(values = c(`TRUE` = "firebrick2", `FALSE` = "grey40")) +
+  theme(legend.position = "none") +
+  labs(y = "mean(ICC)/sd(ICC)", title = "baseline wave 1 vs wave 2, trial-level coefs")
+
+r_sum %>%
+  group_by(task, is_core32) %>%
+  summarize(
+    icc_mu = mean(icc),
+    icc_sd = sd(icc),
+    # icc_d = icc_mu/icc_sd
+  ) %>%
+
+  ggplot(aes(task, icc_mu, fill = is_core32)) +
+  # geom_boxplot(aes(fill = is_core32), position = position_dodge(width = 0.5), width = 0.5, color = "black")
+  geom_col(position = position_dodge(width = 0.5), width = 0.5, color = "black") +
+  geom_errorbar(aes(ymax = icc_mu + icc_sd, ymin = icc_mu - icc_sd), position = position_dodge(width = 0.5), width = 0) +
+  scale_fill_manual(values = c(`TRUE` = "firebrick2", `FALSE` = "grey40")) +
+  theme(legend.position = "none") +
+  labs(y = "mean(ICC)+/-sd(ICC)", title = "baseline wave 1 vs wave 2, trial-level coefs")
 
 
 
 ```
 
 
-TODO:
-2. generate behavioral files for DMCC2 and DMCC3 and copy to "in"
 
 ```{r}
 
+p_tr_sum <- r_sum %>%
+  
+  melt(id.cols = c("task", "roi"), measure.vars = c("r", "rho", "icc"), variable.name = "stat") %>%
+  
+  ggplot(aes(stat, value)) +
+  
+  geom_hline(yintercept = 0, color = "grey60") +
+  geom_hline(yintercept = 0.7, color = "grey60") +
+  
+  geom_boxplot(fill = "grey40", width = 0.25) +
+  geom_point(
+    data = . %>% filter(roi %in% key_schaefer$parcel[core32]), 
+    position = position_jitter(width = 0.1),
+    color = "firebrick2", alpha = 0.5,
+    shape = 16, size = 1
+    ) +
+  
+  facet_grid(vars(task), vars(get_network(roi))) +
+  
+  theme(legend.position = "none")
 
+ggsave(
+  here("out", "icc", "figs", "hilo-test-retest_summary-stats.pdf"), 
+  p_tr_sum, 
+  dev = "pdf", height = 4, width = 7
+  )
+
+
+
+
+
+
+r_sum_mean <- d_sum[,
+      .(mu = (mean(wave1) + mean(wave2))/2),
+      by = c("task", "roi")
+      ]
+r_sum <- merge(r_sum_mean, r_sum, by = c("task", "roi"))
+
+r_sum %>%
+  
+  ggplot(aes(mu, r)) +
+  
+  geom_hline(yintercept = 0, color = "grey60") +
+  geom_vline(xintercept = 0, color = "grey60") +
+  
+  geom_point(aes(color = roi %in% rois[core32]), shape = 16) +
+  
+  scale_color_manual(values = c(`TRUE` = "firebrick2", `FALSE` = "grey40")) +
+  
+  
+  facet_grid(cols = vars(task)) +
+  
+  
+  theme(legend.position = "none")
+
+
+
+
+```
+
+
+
+## trial-level lme model
+
+
+```{r}
+
+## prep data
+
+d_hilo <- d[!is.na(hilo)]
+d_hilo$hilo <- factor(d_hilo$hilo, levels = c("lo", "hi"))
+contrasts(d_hilo$hilo) <- matrix(c(-0.5, 0.5), nrow = 2, dimnames = list(c("lo", "hi"), "hi"))
+
+
+
+
+## intercept only model, per task ----
+
+f_int <- paste0(key_schaefer$parcel, " ~ hilo + (1 | subj)")
+names(f_int) <- key_schaefer$parcel
+
+m_int <- enlist(tasks)
+m_int_fixef <- enlist(tasks)
+
+for (task_val in tasks) {
+  
+  m_int[[task_val]] <- mclapply(f_int, function(x) lmer(as.formula(x), d_hilo[task == task_val]), mc.cores = n_core/2)
+
+  m_int_fixef[[task_val]] <- rbindlist(lapply(m_int[[task_val]], pull_fixef), idcol = "roi")
+  
+}
+
+m_int_fixef <- rbindlist(m_int_fixef, idcol = "task")
+
+
+p_fixef_lme_int <- m_int_fixef %>%
+  
+  filter(term == "hilohi") %>%
+  mutate(core32 = ifelse(roi %in% key_schaefer$parcel[core32], "core32", "not")) %>%
+  
+  ggplot(aes(y = tstat, fill = core32)) +
+  geom_boxplot(width = 0.15, position = position_dodge(width = 0.25)) +
+  
+  scale_fill_manual(values = c(core32 = "firebrick2", not = "grey40")) +
+  facet_grid(vars(task), vars(get_network(roi))) +
+  
+  theme(legend.position = "none", axis.text.x = element_blank(), axis.ticks.x = element_blank())
+
+ggsave(
+  here("out", "icc", "figs", "hilo-fixef_lme-int.pdf"), 
+  p_fixef_lme_int, 
+  dev = "pdf", height = 4, width = 7
+  )
+
+
+  
+  
+## hilo slope model, per task ----
+
+# f_hilo <- paste0(key_schaefer$parcel, " ~ hilo + (hilo | subj)")
+# names(f_hilo) <- key_schaefer$parcel
+# 
+# m_hilo <- enlist(tasks)
+# m_hilo_fixef <- enlist(tasks)
+# 
+# for (task_val in tasks) {
+#   
+#   m_hilo[[task_val]] <- mclapply(f_hilo, function(x) lmer(as.formula(x), d_hilo[task == task_val]), mc.cores = n_core/2)
+#   
+#   m_hilo_fixef[[task_val]] <- rbindlist(lapply(m_hilo[[task_val]], pull_fixef), idcol = "roi")
+#   
+# }
+# 
+# m_hilo_fixef <- rbindlist(m_hilo_fixef, idcol = "task")
+# 
+
+
+
+
+
+## test-retest model (gang style: uncorrelated slope and intercept) ----
+
+
+## build gang-style random effect design matrix:
+
+wave_hilo <- model.matrix(~ hilo*wave, d_hilo)
+colnames(wave_hilo) <- c("mean_wave1", "hilo_wave1", "mean_wave2", "hilo_wave2")
+gmean <- wave_hilo[, c('mean_wave1', 'mean_wave2')]
+hiloef <- wave_hilo[, c('hilo_wave1', 'hilo_wave2')]
+
+
+f_tr <- paste0(key_schaefer$parcel, " ~ hilo * wave + (0 + gmean_task | subj) + (0 + hiloef_task | subj)")
+names(f_tr) <- key_schaefer$parcel
+
+m_tr <- enlist(tasks)
+m_tr_fixef <- enlist(tasks)
+m_tr_cors <- enlist(tasks)
+
+for (task_val in tasks) {
+  
+  gmean_task <- gmean[d_hilo$task == task_val, ]
+  hiloef_task <- gmean[d_hilo$task == task_val, ]
+  
+  m_tr[[task_val]] <- mclapply(f_tr, function(x) lmer(as.formula(x), d_hilo[task == task_val]), mc.cores = n_core/2)
+  
+  m_tr_fixef[[task_val]] <- rbindlist(lapply(m_tr[[task_val]], pull_fixef), idcol = "roi")
+  m_tr_cors[[task_val]] <- unlist(lapply(m_tr[[task_val]], pull_trcor))
+  
+}
+
+m_tr_cors <- do.call(cbind, m_tr_cors)
+m_tr_cors <- as.data.table(m_tr_cors, keep.rownames = "roi")
+
+
+
+
+p_tr_lme_dist <- m_tr_cors %>%
+  
+  melt(id.vars = "roi", variable.name = "task") %>%
+  
+  ggplot(aes(value)) +
+  geom_histogram(fill = "grey40", bins = 20) +
+  
+  facet_wrap(vars(task))
+
+ggsave(
+  here("out", "icc", "figs", "hilo-test-retest_lme-gang_dist.pdf"), 
+  p_tr_lme_dist, 
+  dev = "pdf", height = 3, width = 4
+  )
+
+
+
+# p_tr_lme_box <- m_tr_cors %>%
+#   
+#   melt(id.vars = "roi", variable.name = "task") %>%
+#   
+#   filter(!is.nan(value), abs(value) < 0.999) %>%
+#   
+#   mutate(core32 = ifelse(roi %in% key_schaefer$parcel[core32], "core32", "not")) %>%
+#   
+#   
+#   ggplot(aes(core32, value, fill = core32)) +
+#   geom_boxplot(width = 0.25) +
+#   
+#   scale_fill_manual(values = c(core32 = "firebrick2", not = "grey40")) +
+#   
+#   facet_grid(vars(task), vars(get_network(roi))) +
+#   
+#   theme(legend.position = "none")
+# 
+# 
+# ggsave(
+#   here("out", "icc", "figs", "hilo-test-retest_lme-gang_box.pdf"), 
+#   p_tr_lme_box, 
+#   dev = "pdf", height = 4, width = 7
+#   )
+
+
+
+```
+
+
+## behavioral prediction
+
+```{r}
+
+## RT ----
+
+
+## per task:
+
+
+f_rt <- paste0("rt ~ hilo + ", key_schaefer$parcel, " + (hilo + ", key_schaefer$parcel, " | subj)")
+names(f_rt) <- key_schaefer$parcel
+
+m_rt <- enlist(tasks)
+m_rt_fixef <- enlist(tasks)
+
+for (task_val in tasks) {
+  
+  m_rt[[task_val]] <- mclapply(f_rt, function(x) lmer(as.formula(x), d[task == task_val]), mc.cores = n_core/2)
+  
+  m_rt_fixef[[task_val]] <- rbindlist(lapply(m_rt[[task_val]], pull_fixef))
+
+}
+
+
+m_rt_fixef <- rbindlist(lapply(m_rt_fixef, function(x) x[term %in% key_schaefer$parcel]), idcol = "task")
+m_rt_fixef <- rename(m_rt_fixef, roi = term)
+
+p_rt_box <- m_rt_fixef %>%
+  
+  ggplot(aes(get_network(roi), tstat)) +
+  geom_hline(yintercept = 0) +
+  
+  geom_boxplot(width = 0.2, fill = "grey40") +
+  facet_grid(vars(task)) +
+  
+  labs(x = "network", y = "t stat for RT prediction") +
+  coord_flip()
+
+ggsave(
+  here("out", "icc", "figs", "rt-mod_box.pdf"), 
+  p_rt_box, 
+  dev = "pdf", height = 5, width = 4
+  )
+
+
+
+## all tasks:
+
+
+f_rt_all <- paste0("rt ~ hilo + ", key_schaefer$parcel, " + (hilo + ", key_schaefer$parcel, " | subj)")
+names(f_rt_all) <- key_schaefer$parcel
+
+m_rt_all <- mclapply(f_rt_all, function(x) lmer(as.formula(x), d), mc.cores = n_core/2)
+m_rt_all_fixef <- rbindlist(lapply(m_rt_all, pull_fixef))
+m_rt_all_fixef <- m_rt_all_fixef %>% filter(term %in% key_schaefer$parcel) %>% rename(roi = term)
+
+
+p_rt_all_box <- m_rt_all_fixef %>%
+  
+  ggplot(aes(get_network(roi), tstat)) +
+  geom_hline(yintercept = 0) +
+  
+  geom_boxplot(width = 0.1, fill = "grey40") +
+  
+  labs(x = "network", y = "t stat for RT prediction") +
+  coord_flip()
+
+ggsave(
+  here("out", "icc", "figs", "rt-alltask-mod_box.pdf"), 
+  p_rt_all_box, 
+  dev = "pdf", height = 3, width = 4
+  )
+
+
+
+
+
+
+# x %>% select(LH_SalVentAttn_FrOperIns_3, rt, trial.type, subj) %>% 
+#   ggplot(aes(LH_SalVentAttn_FrOperIns_3, rt, color = trial.type)) +
+#   geom_point() +
+#   facet_wrap(vars(subj), scales = "free") +
+#   stat_smooth(method = "lm") +
+#   scale_color_brewer(type = "qual", palette = 1)
+# 
+# x %>% select(LH_Default_PFC_3, rt, subj) %>% 
+#   group_by(subj) %>%
+#   summarize(r = cor(RH_SalVentAttn_FrOperIns_5, rt)) %>% View
+
+
+
+
+## error ----
+
+
+
+## all tasks:
+
+
+
+f_er_all <- paste0("er ~ hilo + ", key_schaefer$parcel, " + (hilo + ", key_schaefer$parcel, " | subj)")
+names(f_er_all) <- key_schaefer$parcel
+d$er <- 1 - d$acc
+m_er_all <- mclapply(
+  f_er_all, 
+  function(x) glmer(
+    as.formula(x), d, 
+    family = "binomial", 
+    control = glmerControl(optCtrl = list(maxfun = 1E8))
+    ), 
+  mc.cores = n_core/2
+  )
+m_er_all_fixef <- rbindlist(lapply(m_er_all, pull_fixef, nms = c("roi", "b", "se", "z", "p")))
+m_er_all_fixef <- m_er_all_fixef %>% filter(roi %in% key_schaefer$parcel)
+
+
+p_er_all_box <- m_er_all_fixef %>%
+  
+  ggplot(aes(get_network(roi), z)) +
+  geom_hline(yintercept = 0) +
+  
+  geom_boxplot(width = 0.1, fill = "grey40") +
+  
+  labs(x = "network", y = "t stat for ER prediction") +
+  coord_flip()
+
+ggsave(
+  here("out", "icc", "figs", "er-alltask-mod_box.pdf"), 
+  p_er_all_box, 
+  dev = "pdf", height = 3, width = 4
+  )
+
+
+
+
+
+```
+
+
+## dim reduction
+
+```{r}
+
+d_sub_wave1 <- d[subj == subj[1] & task == "Axcpt" & wave == "wave1", ..rois]
+pca_wave1 <- prcomp(d_sub_wave1)
+eig_wave1 <- pca_wave1$rotation
+plot(pca_wave1)
+
+d_sub_wave2 <- d[subj == subj[1] & task == "Axcpt" & wave == "wave2", ..rois]
+pca_wave2 <- prcomp(d_sub_wave2)
+eig_wave2 <- pca_wave2$rotation
+plot(pca_wave2)
+
+
+cor(eig_wave1[, 1:3], eig_wave2[, 1:3])
+
+sort(eig_wave1[, 2])
+
+
+d_sub_wave1 <- d[!is.na(hilo) & subj == subj[1] & task == "Axcpt" & wave == "wave1"]
+X_wave1 <- model.matrix(~ factor(d_sub_wave1$hilo, levels = c("lo", "hi")))
+Y_wave1 <- as.matrix(d_sub_wave1[, ..rois])
+fit_wave1 <- .lm.fit(X_wave1, Y_wave1)
+
+B_wave1 <- coef(fit_wave1)
+colnames(B_wave1) <- rois
+
+
+d_sub_wave2 <- d[!is.na(hilo) & subj == subj[1] & task == "Axcpt" & wave == "wave2"]
+X_wave2 <- model.matrix(~ factor(d_sub_wave2$hilo, levels = c("lo", "hi")))
+Y_wave2 <- as.matrix(d_sub_wave2[, ..rois])
+fit_wave2 <- .lm.fit(X_wave2, Y_wave2)
+
+B_wave2 <- coef(fit_wave2)
+colnames(B_wave2) <- rois
+
+
+# cor(B_wave1[2, ], B_wave2[2, ])
+# cor(B_wave1[1, ], B_wave2[1, ])
+
+as.matrix(d_sub_wave1[, ..rois]) %*% B_wave2[2, ]
+
+
+
+cor(d_sub_wave1[, rt], as.matrix(d_sub_wave1[, ..rois]) %*% B_wave2[2, ])
+cor(d_sub_wave2[, rt], as.matrix(d_sub_wave2[, ..rois]) %*% B_wave1[2, ])
+
+
+cor(d_sub_wave1[, rt], as.matrix(d_sub_wave1[, ..rois]) %*% B_wave2[2, ])
+
+
+
+
+
+
+d_sub_wave1_stroop <- d[!is.na(hilo) & subj == subj[1] & task == "Stroop" & wave == "wave1"]
+X_wave1_stroop <- model.matrix(~ factor(d_sub_wave1_stroop$hilo, levels = c("lo", "hi")))
+Y_wave1_stroop <- as.matrix(d_sub_wave1_stroop[, ..rois])
+fit_wave1_stroop <- .lm.fit(X_wave1_stroop, Y_wave1_stroop)
+
+cor(coef(fit_wave1_stroop)[2, ], B_wave1[2, ])
+
+
+```
+
+
+
+## brms
+
+
+```{r}
+
+## walkthrough example: https://cran.r-project.org/web/packages/brms/vignettes/brms_overview.pdf
+# 
+# 
+# data("kidney")
+# head(kidney, n = 3)
+# 
+# fit1 <- brm(
+#   formula = time | cens(censored) ~ age * sex + disease + (1 + age|patient),
+#   data = kidney, 
+#   family = lognormal(),
+#   prior = c(
+#     set_prior("normal(0,5)", class = "b"),
+#     set_prior("cauchy(0,2)", class = "sd"), 
+#     set_prior("lkj(2)", class = "cor")
+#     ),
+#   warmup = 1000, iter = 2000, chains = 4, 
+#   control = list(adapt_delta = 0.99)
+#   )
+# summary(fit1, WAIC = TRUE)
+# plot(fit1)
+# 
+# hypothesis(fit1, "Intercept - age > 0", class = "sd", group = "patient")
+# 
+# fit2 <- update(fit1, formula. = ~ . - (1 + age|patient) + (1|patient))
+# 
+# LOO(fit1, fit2)
+
+
+
+## ----
+# https://solomonkurz.netlify.app/post/2019-02-10-bayesian-robust-correlations-with-brms-and-why-you-should-love-student-s-t/
+# https://baezortega.github.io/2018/05/28/robust-correlation/
+
+
+d_hilo <- d[!is.na(hilo)]
+d_hilo$hilo <- factor(d_hilo$hilo, levels = c("lo", "hi"))
+contrasts(d_hilo$hilo) <- matrix(c(-0.5, 0.5), nrow = 2, dimnames = list(c("lo", "hi"), "hi"))
+
+
+test <- d_hilo[, task == "Axcpt", c("LH_DorsAttn_Post_10", "hilo", "subj", "wave")]
+
+wave_hilo <- model.matrix(~ hilo*wave, test)
+colnames(wave_hilo) <- c("mean_wave1", "hilo_wave1", "mean_wave2", "hilo_wave2")
+gmean <- wave_hilo[, c('mean_wave1', 'mean_wave2')]
+hiloef <- wave_hilo[, c('hilo_wave1', 'hilo_wave2')]
+test <- cbind(test, gmean, hiloef)
+
+fit1 <- brm(
+  formula = LH_DorsAttn_Post_10 ~ hilo * wave +
+    (0 + mean_wave1 + mean_wave2 | subj) + 
+    (0 + hilo_wave1 + hilo_wave2 | subj),
+  data = test, 
+  family = student,
+  warmup = 1000, iter = 2000, chains = 4, 
+  control = list(adapt_delta = 0.99),
+  cores = 4
+  )
+
+
+# get_prior(
+#   LH_DorsAttn_Post_10 ~ hilo * wave +
+#     (0 + mean_wave1 + mean_wave2 | subj) + 
+#     (0 + hilo_wave1 + hilo_wave2 | subj),
+#   data = test, 
+#   family = student
+#   )
+  # prior = c(
+  #   # prior(gamma(2, .1), class = nu),
+  #   # set_prior("normal(0,5)", class = "b"),
+  #   # set_prior("cauchy(0,2)", class = "sd"), 
+  #   # set_prior("lkj(1)", class = "cor")
+  #   ),
+
+
+summary(fit1, WAIC = TRUE)
+plot(fit1)
+
+# https://solomonkurz.netlify.app/post/2019-02-10-bayesian-robust-correlations-with-brms-and-why-you-should-love-student-s-t/
+
+## intercept only model, per task ----
+# 
+# f_int <- paste0(key_schaefer$parcel, " ~ hilo + (1 | subj)")
+# names(f_int) <- key_schaefer$parcel
+# 
+# m_int <- enlist(tasks)
+# m_int_fixef <- enlist(tasks)
+# 
+# for (task_val in tasks) {
+# 
+#   m_int[[task_val]] <- mclapply(f_int, function(x) lmer(as.formula(x), d_hilo[task == task_val]), mc.cores = n_core/2)
+# 
+#   m_int_fixef[[task_val]] <- rbindlist(lapply(m_int[[task_val]], pull_fixef), idcol = "roi")
+# 
+# }
+# 
+# 
+# 
 
 ```
 

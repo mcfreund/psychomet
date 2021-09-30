@@ -114,6 +114,9 @@ name_glms_dmcc <- c(
   Stroop = "Congruency_EVENTS_censored"
 )
 
+hi <- c(Axcpt = "BX", Cuedts = "InConInc", Stern = "LL5RN", Stroop = "biasInCon")
+lo <- c(Axcpt = "BY", Cuedts = "ConInc", Stern = "LL5NN", Stroop = "biasCon")
+
 
 ## TRs of interest
 

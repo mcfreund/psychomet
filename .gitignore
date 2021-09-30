@@ -38,6 +38,8 @@ vignettes/*.pdf
 # R Environment Variables
 .Renviron
 
+## too large files
+
 /out/runwise/wb/*
 /out/runwise/figs/*
 .Rproj.user
@@ -45,3 +47,6 @@ vignettes/*.pdf
 docs/
 out/icc/projs*
 out/glms/*/RESULTS/*/*/*gii
+
+
+out/test_retest/*.RDS
