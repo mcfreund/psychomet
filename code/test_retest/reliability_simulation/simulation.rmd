@@ -1,0 +1,296 @@
+---
+title: "simulating test-retest reliability models"
+output:
+  html_document:
+    toc: true
+    toc_depth: 3
+    number_sections: true
+---
+
+
+```{r setup, results = FALSE}
+
+library(colorout)
+library(here)
+library(tidyr)
+library(dplyr)
+library(data.table)
+library(ggplot2)
+library(cowplot)
+library(viridis)
+library(brms)
+library(mvnfast)
+
+theme_set(theme_half_open())
+
+```
+
+
+
+# create data
+
+
+```{r create_data}
+
+## constants, params ----
+
+conditions <- c("lo_wave1", "lo_wave2", "hi_wave1", "hi_wave2")
+contrs <- c("lo_wave1", "lo_wave2", "hilo_wave1", "hilo_wave2")
+n_subj <- 30
+n_trialpc <- 50  ## per condition
+n_obs <- n_subj*n_trialpc*length(conditions)
+mu_lo <- 10  ## population mean lo (fixed eff)
+mu_hilo <- 4  ## population mean hilo (fixed eff)
+sigma0 <- 1  ## residual variance (trial-level noise)
+sd_subj <- c(2, 2, 1, 1)  ## subject-level variances (random eff)
+cor_subj_hilo <- 0.75  ## test-retest correlation in hilo (random eff)
+cor_subj_lo <- 0.9  ## correlation in low (random eff)s
+
+
+## simulate ----
+
+## data matrix, contrast weights
+
+d <- data.table(
+	expand.grid(subj = paste0("subj_", 1:n_subj), trialpc = 1:n_trialpc, condition = conditions)
+	)
+
+contr2cond <- cbind(
+	lo_wave1 = c(1, 0, 0, 0),
+	lo_wave2 = c(0, 1, 0, 0),
+	hi_wave1 = c(1, 0, 1, 0),
+	hi_wave2 = c(0, 1, 0, 1)
+)  ## contrasts to condition means
+
+## random effects
+
+R <- rbind(
+	c(1, cor_subj_lo, 0, 0),
+	c(cor_subj_lo, 1, 0, 0),
+	c(0, 0, 1, cor_subj_hilo),
+	c(0, 0, cor_subj_hilo, 1)
+)
+S <- diag(sd_subj)
+cov_subj <- S %*% R %*% S
+dimnames(cov_subj) <- list(contrs, contrs)
+
+lambda_subj <- rmvn(n = n_subj, mu = rep(0, 4), sigma = cov_subj)
+colnames(lambda_subj) <- contrs
+
+## fixed effects
+
+mu <- rbind(mu_lo, mu_lo, mu_hilo, mu_hilo)
+rownames(mu) <- contrs
+
+## residual
+
+epsilon <- rnorm(n_obs, sd = sigma0)
+
+## bind and make observations y
+
+cond_pop <- c(crossprod(mu, contr2cond))  ## population level
+cond_pop <- data.table(cond_pop, condition = conditions)
+
+cond_subj <- lambda_subj %*% contr2cond  ## subject level
+cond_subj <- as.data.table(cond_subj)
+cond_subj$subj <- paste0("subj_", 1:n_subj)
+cond_subj <- melt(cond_subj, id.vars = "subj", variable.name = "condition", value.name = "cond_subj")
+cond <- merge(cond_subj, cond_pop, by = "condition")
+
+d <- merge(cond, d, by = c("subj", "condition"))  ## trial level
+d$epsilon <- epsilon
+
+d$y <- d$cond_pop + d$cond_subj + d$epsilon  ## response vector
+d$y5 <- d$cond_pop + d$cond_subj + d$epsilon*5  ## response vector
+d$y10 <- d$cond_pop + d$cond_subj + d$epsilon*10  ## response vector
+
+```
+
+
+
+The correlation matrix we are trying to recover:
+
+```{r}
+
+#image(cov2cor(t(solve(contr2cond)) %*% cov(lambda_subj %*% contr2cond) %*% solve(contr2cond)))
+image(cor(lambda_subj))
+cor(lambda_subj)
+
+```
+
+
+
+
+# models
+
+
+## additional wrangling
+
+```{r}
+
+## create factor cols wave and hilo
+
+d <- separate(d, condition, c("hilo", "wave"))
+d$wave <- factor(d$wave, levels = c("wave1", "wave2"))
+d$hilo <- factor(d$hilo, levels = c("lo", "hi"))
+d$hilo01 <- d$hilo  ## dummy code
+contrasts(d$hilo) <- matrix(c(-0.5, 0.5), nrow = 2, dimnames = list(c("lo", "hi"), "hi"))
+
+
+## create design matrix cols for random effect specification
+
+d <- d %>% arrange(wave, hilo, subj)
+hilo <- model.matrix(~ hilo, d)[, 2]
+wave <- model.matrix(~ 0 + wave, d)
+#image(cbind(hilo, wave))
+wave_hilo <- cbind(
+	mean_wave1 = wave[, 1],
+	mean_wave2 = wave[, 2],
+	hilo_wave1 = hilo*wave[, 1],
+	hilo_wave2 = hilo*wave[, 2]
+)
+image(wave_hilo)
+colnames(wave_hilo) <- c("mean_wave1", "mean_wave2", "hilo_wave1", "hilo_wave2")
+
+data <- cbind(d, wave_hilo)
+
+```
+
+
+
+## summary stats
+
+```{r sumstats}
+
+fit_sum <- data %>%
+	group_by(subj, hilo, wave) %>%
+	summarize(y = mean(y)) %>%
+	pivot_wider(names_from = "hilo", values_from = "y") %>%
+	mutate(hilo = hi - lo) %>%
+	pivot_wider(subj, names_from = "wave", values_from = "hilo") %>%
+	ungroup
+
+fit_sum %>% 
+  ggplot(aes(wave1, wave2)) +
+  geom_point(size = 2)
+
+fit_sum %>% select(wave1, wave2) %>% summarize(r = cor(wave1, wave2))  ## test-retest correlation
+
+```
+
+
+## hierarchical bayes: chen-style model
+
+```{r hbm_chen, cache = TRUE}
+
+fit_chen <- brm(
+  formula =   y ~ hilo * wave + 
+    (0 + mean_wave1 + mean_wave2 | subj) + 
+    (0 + hilo_wave1 + hilo_wave2 | subj),
+  data = data,
+  family = student,
+  warmup = 1000, iter = 2000, chains = 4,
+  control = list(adapt_delta = 0.95),
+  seed = 0,
+  cores = 4
+  )
+
+```
+
+
+```{r hbm_chen_plot}
+
+plot(fit_chen, variable = "cor_subj__hilo_wave1__hilo_wave2")
+summary(fit_chen)
+
+r_chen <- VarCorr(fit_chen)$subj$cor[, "Estimate", ]
+image(r_chen)  ## posterior correlation matrix
+r_chen  ## NB: first two cols are means (hi/2+lo/2), not lo
+
+```
+
+
+
+## hierarchical bayes: full model
+
+```{r hbm_full, cache = TRUE}
+
+fit_full <- update(fit_chen, y ~ hilo * wave + (hilo * wave | subj))
+
+```
+
+
+```{r hbm_full_plot}
+
+summary(fit_full)
+#plot(fit_full, variable = "cor_subj__hilo_wave1__hilo_wave2")
+
+## getting posterior correlation matrix:
+
+r <- VarCorr(fit_full)$subj$cov[, "Estimate", ]
+w <- cbind(
+	c(1, 0, 0, 0),
+	c(1, 1, 0, 0),
+	c(0, 1, 0, 0), 
+	c(0, 1, 0, 1)
+	)
+image(cov2cor(t(w) %*% r %*% w))  ## posterior correlation matrix
+cov2cor(t(w) %*% r %*% w)
+
+```
+
+## impact of increasing trial-level variance
+
+
+```{r impact_residual, cache = TRUE}
+
+fit_chen5 <- update(
+  fit_chen, 
+  y5 ~ hilo * wave + 
+    (0 + mean_wave1 + mean_wave2 | subj) + 
+    (0 + hilo_wave1 + hilo_wave2 | subj),
+  newdata = data,
+  cores = 4
+  )
+
+fit_chen10 <- update(
+  fit_chen, 
+  y10 ~ hilo * wave + 
+    (0 + mean_wave1 + mean_wave2 | subj) + 
+    (0 + hilo_wave1 + hilo_wave2 | subj),
+  newdata = data,
+  cores = 4
+  )
+  
+```
+
+
+```{r impact_residual_plot}
+
+lapply(
+  list(fit_chen, fit_chen5, fit_chen10), 
+  function(x) summary(x, variable = "cor_subj__hilo_wave1__hilo_wave2")
+  )
+
+res <- data.table(
+  sd1 = as_draws_matrix(fit_chen, variable = "cor_subj__hilo_wave1__hilo_wave2"),
+  sd5 = as_draws_matrix(fit_chen5, variable = "cor_subj__hilo_wave1__hilo_wave2"),
+  sd10 = as_draws_matrix(fit_chen10, variable = "cor_subj__hilo_wave1__hilo_wave2")
+)
+
+names(res) <- c("1", "5", "10")
+res <- melt(
+  res, 
+  measure.vars = c("1", "5", "10"), 
+  variable.name = "residual_sd",
+  value.name = "r"
+  )
+
+res %>%
+  ggplot(aes(r, fill = residual_sd)) +
+  geom_density(alpha = 0.5, size = 2) +
+  scale_fill_viridis_d() +
+  labs(x = "cor(hilo_wave1, hilo_wave2)")
+
+```
+

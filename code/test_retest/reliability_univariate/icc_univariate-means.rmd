@@ -1,5 +1,5 @@
 ---
-title: "Trial-level ICC analyses: univariate means, baseline session"
+title: "Trial-level test--retest reliability analyses: univariate means, baseline session"
 output:
   html_document:
     toc: true
@@ -125,6 +125,22 @@ d_hilo <- d[!is.na(hilo)]
 d_hilo_all <- d[!is.na(hilo_all)]
 
 
+## make cols for random effects:
+
+hilo <- model.matrix(~ hilo, d_hilo)[, 2]
+wave <- model.matrix(~ 0 + wave, d_hilo)
+#image(cbind(hilo, wave))
+wave_hilo <- cbind(
+	mean_wave1 = wave[, 1],
+	mean_wave2 = wave[, 2],
+	hilo_wave1 = hilo*wave[, 1],
+	hilo_wave2 = hilo*wave[, 2]
+)
+image(wave_hilo)
+colnames(wave_hilo) <- c("mean_wave1", "mean_wave2", "hilo_wave1", "hilo_wave2")
+
+data_hilo <- cbind(d_hilo, wave_hilo)
+
 ```
 
 
@@ -132,8 +148,6 @@ d_hilo_all <- d[!is.na(hilo_all)]
 
 # condition-level: 'summary statistics'
 
-
-## per task
 
 ```{r icc_condition_level}
 
@@ -183,7 +197,9 @@ r_sum %>%
   ggplot(aes(task, icc_mu, fill = is_core32)) +
   
   geom_col(position = position_dodge(width = 0.5), width = 0.5, color = "black") +
-  geom_errorbar(aes(ymax = icc_mu + icc_sd, ymin = icc_mu - icc_sd), position = position_dodge(width = 0.5), width = 0) +
+  geom_errorbar(
+    aes(ymax = icc_mu + icc_sd, ymin = icc_mu - icc_sd), position = position_dodge(width = 0.5), width = 0
+    ) +
   scale_fill_manual(values = c(`TRUE` = "firebrick2", `FALSE` = "grey40")) +
   
   theme(legend.position = "none") +
@@ -214,7 +230,7 @@ p_tr_sum <- r_sum %>%
   theme(legend.position = "none")
 
 ggsave(
-  here("out", "icc", "figs", "hilo-test-retest_summary-stats.pdf"), 
+  here("out", "test_retest", "figs", "hilo-test-retest_summary-stats.pdf"), 
   p_tr_sum, 
   dev = "pdf", height = 4, width = 7
   )
@@ -248,7 +264,7 @@ p_tr_sum_scatter <- r_sum %>%
 
 
 ggsave(
-  here("out", "icc", "figs", "hilo-test-retest_summary-stats_scatter.pdf"), 
+  here("out", "test_retest", "figs", "hilo-test-retest_summary-stats_scatter.pdf"), 
   p_tr_sum_scatter, 
   dev = "pdf", height = 3.5, width = 7
   )
@@ -258,94 +274,9 @@ p_tr_sum_scatter
 ```
 
 
-## all tasks
-
-
-```{r icc_condition_level_alltask}
-
-
-## estimate
-
-d_sum_alltask <- dcast(d_sum, subj + roi ~ task, value.var = c("wave1", "wave2"))
-r_sum_alltask <- d_sum_alltask[, .(r = list(cor(.SD))), by = "roi", .SDcols = c(combo_paste(c("wave1", "wave2"), tasks))]
-
-r_sum_crosstask <- r_sum_alltask[, .(r_crosstask = mean_crosstask_cor(r)), by = "roi"]
-
-
-
-## plot
-
-r_sum_crosstask[, is_core32 := roi %in% rois[core32]]
-
-
-## core32 vs all others:
-
-r_sum_crosstask %>%
-  
-  group_by(is_core32) %>%
-  summarize(
-    r_mu = mean(r_crosstask),
-    r_sd = sd(r_crosstask),
-  ) %>%
-
-  ggplot(aes(is_core32, r_mu, fill = is_core32)) +
-  
-  geom_col(position = position_dodge(width = 0.5), width = 0.5, color = "black") +
-  geom_errorbar(aes(ymax = r_mu + r_sd, ymin = r_mu - r_sd), position = position_dodge(width = 0.5), width = 0) +
-  scale_fill_manual(values = c(`TRUE` = "firebrick2", `FALSE` = "grey40")) +
-  
-  theme(legend.position = "none") +
-  labs(y = "mean(r)+/-sd(r)", title = "mean cross-task test-retest correlation\nbaseline wave 1 vs wave 2, trial-level coefs")
-
-
-
-## boxplots:
-
-p_tr_sum_crosstask <-
-  
-  r_sum_crosstask %>%
-  
-  ggplot(aes(get_network(roi), r_crosstask)) +
-  
-  geom_hline(yintercept = 0, color = "grey60") +
-  # geom_hline(yintercept = 0.7, color = "grey60") +
-  
-  geom_boxplot(fill = "grey40", width = 0.25) +
-  geom_point(
-    data = . %>% filter(roi %in% key_schaefer$parcel[core32]), 
-    position = position_jitter(width = 0.1),
-    color = "firebrick2", alpha = 0.5,
-    shape = 16, size = 1
-    ) +
-    
-    labs(y = "mean(r)", title = "mean cross-task test-retest correlation\nbaseline wave 1 vs wave 2, trial-level coefs")
-
-
-ggsave(
-  here("out", "icc", "figs", "hilo-test-retest_summary-stats_crosstask.pdf"), 
-  p_tr_sum_crosstask, 
-  dev = "pdf", height = 4, width = 7
-  )
-
-p_tr_sum_crosstask
-
-
-```
-
-
-
-
-
-## comparison to glm-based coefficients
-
-## impact of hilo_all on core32
-
-
 
 # trial-level: LME
 
-
-## per task
 
 Fitted with Gang Chen-style covariance structure.
 6 random-effect (co)variance parameters are estimated (in grey):
@@ -384,20 +315,15 @@ Here the slope is the difference between hi and lo trialtypes.
 This model assumes that intercepts and slopes are uncorrelated.
 What we are interested in is $r_2$, the cross-wave (test--retest) correlation in the hilo contrast.
 
+
 ```{r lme_results}
-
-
-## build gang-style random effect design matrix
-
-wave_hilo <- model.matrix(~ hilo * wave, d_hilo)
-colnames(wave_hilo) <- c("mean_wave1", "hilo_wave1", "mean_wave2", "hilo_wave2")
-gmean <- wave_hilo[, c('mean_wave1', 'mean_wave2')]
-hiloef <- wave_hilo[, c('hilo_wave1', 'hilo_wave2')]
-
 
 ## fit models
 
-f_tr <- paste0(key_schaefer$parcel, " ~ hilo * wave + (0 + gmean_task | subj) + (0 + hiloef_task | subj)")
+f_tr <- paste0(
+  key_schaefer$parcel, 
+  " ~ hilo * wave + (0 + mean_wave1 + mean_wave2 | subj) + (0 + hilo_wave1 + hilo_wave2 | subj)"
+  )
 names(f_tr) <- key_schaefer$parcel
 
 m_tr <- enlist(tasks)
@@ -406,17 +332,9 @@ m_tr_cors <- enlist(tasks)
 
 for (task_val in tasks) {
   
-  ## subset
+  data_hilo_task <- data_hilo[task == task_val]
   
-  gmean_task <- gmean[d_hilo$task == task_val, ]
-  hiloef_task <- gmean[d_hilo$task == task_val, ]
-  d_hilo_task <- d_hilo[task == task_val]
-  
-  ## fit
-  
-  m_tr[[task_val]] <- mclapply(f_tr, function(x) lmer(as.formula(x), d_hilo_task), mc.cores = n_core/2)
-  
-  ## extract
+  m_tr[[task_val]] <- mclapply(f_tr, function(x) lmer(as.formula(x), data_hilo_task), mc.cores = n_core/2)
   
   m_tr_cors[[task_val]] <- unlist(lapply(m_tr[[task_val]], pull_trcor))
   
@@ -425,8 +343,8 @@ for (task_val in tasks) {
 r_tr_cors <- as.data.table(do.call(cbind, m_tr_cors), keep.rownames = "roi")
 
 
-## plot
 
+## plot
 
 r_tr_cors <- r_tr_cors %>% melt(id.vars = "roi", variable.name = "task")
 r_tr_cors_filter <- r_tr_cors %>% filter(!is.nan(value))
@@ -443,7 +361,7 @@ p_tr_lme_dist <- r_tr_cors_filter %>%
     )
 
 ggsave(
-  here("out", "icc", "figs", "hilo-test-retest_lme-gang_dist.pdf"), 
+  here("out", "test_retest", "figs", "hilo-test-retest_lme-gang_dist.pdf"), 
   p_tr_lme_dist, 
   dev = "pdf", height = 3, width = 4
   )
@@ -453,6 +371,8 @@ p_tr_lme_dist
 
 
 ```
+
+
 
 ### fixed effects
 
@@ -509,13 +429,7 @@ r_hilo_fixef %>%
 
 
 
-## all tasks
-
-
-
-
-
-# trial-level: HBA
+# trial-level: hierarcical bayesian models
 
 Similar structure as LME above.
 As in Chen et al. (2021), assume response is distributed as Student's t (providing robustness against outliers).
@@ -523,21 +437,31 @@ Same priors used here as in Chen et al. (2021), which are the default priors in 
 
 
 ```{r}
+
+fnames_results_hbm <- here("out", "test_retest", paste0("fits_hba_chenstyle_", tasks, ".RDS"))
+should_fit_models <- any(!file.exists(fnames_results_hbm))
+
+```
+
+## fit models
+
+```{r, eval = should_fit_models}
+
 # task_i <- 1
 # roi_i <- 1
 
 
-
 ## prep data
 
-d_hilo_l <- melt(d_hilo, id.vars = trial_cols, variable.name = "roi", value.name = "bold")
-
-wave_hilo <- model.matrix(~ hilo * wave, d_hilo_l)
-colnames(wave_hilo) <- c("mean_wave1", "hilo_wave1", "mean_wave2", "hilo_wave2")
-d_hilo_l <- cbind(d_hilo_l, wave_hilo)
+data_hilo_l <- 
+  melt(
+    data_hilo, 
+    id.vars = c(trial_cols, "mean_wave1", "mean_wave2", "hilo_wave1", "hilo_wave2"), 
+    variable.name = "roi", value.name = "bold"
+  )
 
 model_cols <- c("subj", "task", "wave", "roi", "hilo", "mean_wave1", "mean_wave2", "hilo_wave1", "hilo_wave2", "bold")
-d_hilo_l <- d_hilo_l[, ..model_cols]
+data_hilo_l <- data_hilo_l[, ..model_cols]
 
 
 ## model info
@@ -551,7 +475,7 @@ prior_student <- get_prior(formula = f, data = d_hilo_l, family = student)
 
 
 ## run
-
+run_time <- enlist(tasks)
 for (task_i in seq_along(tasks)) {
 
     ## subset and format
@@ -578,7 +502,7 @@ for (task_i in seq_along(tasks)) {
       )
     
     plan(sequential)
-    run_time <- Sys.time() - start_time
+    run_time[[task_i]] <- Sys.time() - start_time
     
     ## save
     
@@ -589,95 +513,215 @@ for (task_i in seq_along(tasks)) {
 
 }
 
+```
 
+## read results
 
+```{r, cache = TRUE, cache.lazy = FALSE}
 
+## get reliability estimates (all ROIs):
 
+fits <- enlist(tasks)
+posterior_trr <- enlist(tasks)
 
-allfits_core32 <- enlist(tasks)
-for (task_val in tasks) {
+for (task_i in seq_along(tasks)) {
   
-  fname_results <- here("out", "test_retest", paste0("fits_hba_chenstyle_", task_val, ".RDS"))
-  allfits_core32[[task_val]] <- readRDS(fname_results)[core32]
+  task_val <- tasks[task_i]
+  fname_results_val <- fnames_results_hbm[task_i]
+  
+  fits[[task_val]] <- readRDS(fname_results_val)
+  names(fits[[task_val]]) <- rois
+    
+  ## extract correlation info:
+  
+  posterior_trr_task <- 
+	  lapply(
+	    fits[[task_val]], 
+	    function(x) {
+	      x <- as_draws_matrix(x, variable = "cor_subj__hilo_wave1__hilo_wave2")
+	      x <- data.table(x)
+	      x
+	      }
+	    )
+  
+  posterior_trr[[task_val]] <- rbindlist(posterior_trr_task, idcol = "roi")
+  
+  print(task_val)
   
 }
 
-r_tr_hbm <- enlist(tasks)
-for (task_val in tasks) {
-  
-  r_tr_hbm[[task_val]] <- 
-    vapply(
-      allfits_core32[[task_val]], 
-      function(x) mean(as_draws_df(x)$cor_subj__hilo_wave1__hilo_wave2), as.numeric(1)
-    )
-  
-}
-r_tr_hbm <- bind_rows(r_tr_hbm)
-r_tr_hbm$roi <- rois[core32]
-
-
-
-
-
-
-# cl <- makeCluster(2)  ## with cores = 4, leaves 32-24 free
-# registerDoParallel(cl)
-# res <- 
-#   
-#   foreach(
-#     roi_i = seq_along(rois)[1:2], 
-#     .inorder = FALSE, 
-#     .packages = c("brms", "data.table")
-#     ) %dopar% {
-#       
-#       
-#       ## subset roi col:
-#         
-#       roi_val <- rois[roi_i]
-#       cols_model <- c(roi_val, "hilo", "subj", "wave")
-#       d_task_sub <- d_task[, ..cols_model]
-#       
-#       
-#       ## make cols for random effect specification:
-#       
-#       wave_hilo <- model.matrix(~ hilo*wave, d_task_sub)
-#       colnames(wave_hilo) <- c("mean_wave1", "hilo_wave1", "mean_wave2", "hilo_wave2")
-#       dii <- cbind(d_task_sub, wave_hilo)
-#       
-#       ## get formula:
-#       
-#       f <-
-#         as.formula(
-#           paste0(
-#             roi_val,
-#             " ~ hilo * wave + (0 + mean_wave1 + mean_wave2 | subj) + (0 + hilo_wave1 + hilo_wave2 | subj)"
-#             )
-#         )
-#       
-#       ## fit model:
-# 
-#       
-#       # fit <- brm(
-#       #   formula = f,
-#       #   data = dii,
-#       #   family = student,
-#       #   warmup = 1000, iter = 2000, chains = 4,
-#       #   control = list(adapt_delta = 0.99),
-#       #   cores = 4
-#       #   )
-#   (run_time <- Sys.time() - start_time)
-# 
-#       fit$model_name <- roi_val
-# 
-#       fit
-#         
-# }
-# stopCluster(cl)
+posterior_trr_d <- rbindlist(posterior_trr, idcol = "task")
 
 
 ```
 
 
+
+
+
+## plot
+
+```{r width = 11, height = 11}
+
+
+## density core 32
+
+p_posteriors <- posterior_trr_d[roi %in% rois[core32]] %>%
+  
+  ggplot(aes(cor_subj__hilo_wave1__hilo_wave2, fill = task, color = task)) +
+  geom_density(alpha = 1/3, size = 1) +
+  facet_wrap(vars(roi)) +
+  
+  scale_color_brewer(type = "qual", palette = 7) +
+  scale_fill_brewer(type = "qual", palette = 7) +
+  
+  theme(legend.position = c(0.5, 0.05)) +
+  labs(x = "cor(hilo_wave1, hilo_wave2)", y = "posterior density", title = "test-retest correlations in core 32")
+
+p_posteriors
+
+ggsave(here("out", "test_retest", "figs", "posterior_trr_core32.pdf"), p_posteriors, width = 10, height = 10)
+
+
+
+
+## scatter plots
+
+get_map <- function(x) {
+  
+  dens <- density(x)
+  dens$x[which.max(dens$y)]
+  
+}
+
+
+r_tr <- posterior_trr_d[, 
+                .(
+                  mean_hbm = mean(cor_subj__hilo_wave1__hilo_wave2),
+                  map_hbm = get_map(cor_subj__hilo_wave1__hilo_wave2)
+                  ), 
+                by = c("task", "roi")
+                ] %>%
+  full_join(r_sum, by = c("task", "roi"))
+
+
+p_scatter_means <- r_tr %>%
+
+	ggplot(aes(mean_hbm, r)) +
+	geom_abline(color = "grey60") +
+	geom_hline(yintercept = 0, color = "grey60") +
+	geom_vline(xintercept = 0, color = "grey60") +
+	geom_point(aes(color = is_core32, alpha = is_core32), shape = 16) +
+  
+  scale_color_manual(values = c(`TRUE` = "firebrick2", `FALSE` = "black")) +
+  scale_alpha_manual(values = c(`TRUE` = 1, `FALSE` = 0.5)) +
+  
+  theme(legend.position = "none") +
+	facet_wrap(vars(task)) +
+  labs(x = "HBM posterior mean", y = "summary stat", y = "test retest correlations")
+
+p_scatter_means
+
+ggsave(here("out", "test_retest", "figs", "posterior_scatter.pdf"), p_scatter_means, width = 6, height = 6)
+
+
+p_scatter_map <- r_tr %>%
+
+	ggplot(aes(map_hbm, r)) +
+	geom_abline(color = "grey60") +
+	geom_hline(yintercept = 0, color = "grey60") +
+	geom_vline(xintercept = 0, color = "grey60") +
+	geom_point(aes(color = is_core32, alpha = is_core32), shape = 16) +
+  
+  scale_color_manual(values = c(`TRUE` = "firebrick2", `FALSE` = "black")) +
+  scale_alpha_manual(values = c(`TRUE` = 1, `FALSE` = 0.5)) +
+  
+  theme(legend.position = "none") +
+	facet_wrap(vars(task)) +
+  labs(x = "HBM MAP", y = "summary stat", y = "test retest correlations")
+
+p_scatter_map
+
+ggsave(here("out", "test_retest", "figs", "posterior_scatter_map.pdf"), p_scatter_map, width = 6, height = 6)
+
+
+```
+
+
+## variance ratios
+
+```{r width = 11, height = 11}
+
+ratios <- enlist(tasks)
+for (task_val in tasks) {
+
+	ratio_task  <- lapply(
+
+		fits[[task_val]],
+
+			function(x) {
+
+			varcor <- VarCorr(x)
+			resid_sd <- varcor$residual$sd[1]
+			subj_mean_sd <- sqrt(mean(varcor$subj$sd[c("mean_wave1", "mean_wave2"), "Estimate"]^2))
+			subj_hilo_sd <- sqrt(mean(varcor$subj$sd[c("hilo_wave1", "hilo_wave2"), "Estimate"]^2))
+
+			ratio_mean <- (resid_sd / subj_mean_sd)^2
+			ratio_hilo <- (resid_sd / subj_hilo_sd)^2
+
+			data.table(
+			  resid_sd = resid_sd, subj_mean_sd = subj_mean_sd, subj_hilo_sd = subj_hilo_sd,
+			  ratio_mean = ratio_mean,
+			  ratio_hilo = ratio_hilo
+			  )
+
+		}
+	)
+
+	ratios[[task_val]] <- rbindlist(ratio_task, idcol = "roi")
+
+}
+ratios <- rbindlist(ratios, idcol = "task")
+
+
+p_vardecomp <- ratios %>%
+	
+  melt(id.vars = c("task", "roi")) %>%
+  filter(variable %in% c("resid_sd", "subj_mean_sd", "subj_hilo_sd")) %>%
+  
+	ggplot(aes(variable, value)) +
+	geom_boxplot(width = 0.2, fill = "grey40") +
+  
+	facet_grid(rows = vars(task)) +
+  coord_flip() +
+  labs(x = "parameter", y = "posterior mean", title = "variance decomposition")
+
+p_vardecomp
+
+ggsave(here("out", "test_retest", "figs", "variance_ratio.pdf"), p_vardecomp, width = 6, height = 4.5)
+
+
+p_ratio <- ratios %>%
+	
+  melt(id.vars = c("task", "roi")) %>%
+  filter(variable %in% c("ratio_mean", "ratio_hilo")) %>%
+  
+	ggplot(aes(variable, value)) +
+	geom_boxplot(width = 0.2, fill = "grey40") +
+  
+	facet_grid(rows = vars(task)) +
+  labs(x = "parameter", y = "posterior mean (log scale)", title = "variance ratio: trial-level/subject-level") +
+  scale_y_log10() +
+  
+  coord_flip()
+  
+p_ratio
+  
+ggsave(here("out", "test_retest", "figs", "variance_ratio.pdf"), p_ratio, width = 6, height = 4.5)
+
+
+
+```
 
 
 

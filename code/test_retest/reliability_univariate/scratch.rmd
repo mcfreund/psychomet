@@ -1,0 +1,209 @@
+
+## all tasks
+
+
+```{r icc_condition_level_alltask}
+
+
+## estimate
+
+d_sum_alltask <- dcast(d_sum, subj + roi ~ task, value.var = c("wave1", "wave2"))
+r_sum_alltask <- d_sum_alltask[,
+                               .(r = list(cor(.SD))), 
+                               by = "roi", 
+                               .SDcols = c(combo_paste(c("wave1", "wave2"), tasks))
+]
+
+r_sum_crosstask <- r_sum_alltask[, .(r_crosstask = mean_crosstask_cor(r)), by = "roi"]
+
+
+
+## plot
+
+r_sum_crosstask[, is_core32 := roi %in% rois[core32]]
+
+
+## core32 vs all others:
+
+r_sum_crosstask %>%
+  
+  group_by(is_core32) %>%
+  summarize(
+    r_mu = mean(r_crosstask),
+    r_sd = sd(r_crosstask),
+  ) %>%
+  
+  ggplot(aes(is_core32, r_mu, fill = is_core32)) +
+  
+  geom_col(position = position_dodge(width = 0.5), width = 0.5, color = "black") +
+  geom_errorbar(aes(ymax = r_mu + r_sd, ymin = r_mu - r_sd), position = position_dodge(width = 0.5), width = 0) +
+  scale_fill_manual(values = c(`TRUE` = "firebrick2", `FALSE` = "grey40")) +
+  
+  theme(legend.position = "none") +
+  labs(
+    y = "mean(r)+/-sd(r)", 
+    title = "mean cross-task test-retest correlation\nbaseline wave 1 vs wave 2, trial-level coefs"
+  )
+
+
+
+## boxplots:
+
+p_tr_sum_crosstask <-
+  
+  r_sum_crosstask %>%
+  
+  ggplot(aes(get_network(roi), r_crosstask)) +
+  
+  geom_hline(yintercept = 0, color = "grey60") +
+  # geom_hline(yintercept = 0.7, color = "grey60") +
+  
+  geom_boxplot(fill = "grey40", width = 0.25) +
+  geom_point(
+    data = . %>% filter(roi %in% key_schaefer$parcel[core32]), 
+    position = position_jitter(width = 0.1),
+    color = "firebrick2", alpha = 0.5,
+    shape = 16, size = 1
+  ) +
+  
+  labs(y = "mean(r)", title = "mean cross-task test-retest correlation\nbaseline wave 1 vs wave 2, trial-level coefs")
+
+
+ggsave(
+  here("out", "test_retest", "figs", "hilo-test-retest_summary-stats_crosstask.pdf"), 
+  p_tr_sum_crosstask, 
+  dev = "pdf", height = 4, width = 7
+)
+
+p_tr_sum_crosstask
+
+
+```
+
+
+
+
+
+## comparison to glm-based coefficients
+
+## impact of hilo_all on core32
+
+```{r}
+
+
+
+
+## testing brms_multiple
+
+# 
+# task_val <- "Axcpt"
+# dii <- d_hilo_l[task == task_val & roi == "LH_SalVentAttn_FrOperIns_3"]
+# 
+# fit <- brm(
+#   formula = f,
+#   data = dii,
+#   family = student,
+#   warmup = 1000, iter = 2000, chains = 4,
+#   control = list(adapt_delta = 0.95),
+#   cores = 4,
+#   seed = 0
+#   )
+# 
+# 
+# f_full <- formula(bold ~ hilo * wave + (hilo * wave | subj))
+# fit_full <- update(fit, formula = f_full)
+# 
+# 
+# fname_results <- here("out", "test_retest", paste0("fits_hba_chenstyle_", task_val, ".RDS"))
+# fits <- readRDS(fname_results)
+# 
+# 
+# 
+# 
+# summary(fits[[core32[1]]])  ## original (brm_multiple)
+# summary(fit[[1]])  ## single reduced (brm)
+# summary(fit_full)  ## single full
+
+
+# cl <- makeCluster(2)  ## with cores = 4, leaves 32-24 free
+# registerDoParallel(cl)
+# res <- 
+#   
+#   foreach(
+#     roi_i = seq_along(rois)[1:2], 
+#     .inorder = FALSE, 
+#     .packages = c("brms", "data.table")
+#     ) %dopar% {
+#       
+#       
+#       ## subset roi col:
+#         
+#       roi_val <- rois[roi_i]
+#       cols_model <- c(roi_val, "hilo", "subj", "wave")
+#       d_task_sub <- d_task[, ..cols_model]
+#       
+#       
+#       ## make cols for random effect specification:
+#       
+#       wave_hilo <- model.matrix(~ hilo*wave, d_task_sub)
+#       colnames(wave_hilo) <- c("mean_wave1", "hilo_wave1", "mean_wave2", "hilo_wave2")
+#       dii <- cbind(d_task_sub, wave_hilo)
+#       
+#       ## get formula:
+#       
+#       f <-
+#         as.formula(
+#           paste0(
+#             roi_val,
+#             " ~ hilo * wave + (0 + mean_wave1 + mean_wave2 | subj) + (0 + hilo_wave1 + hilo_wave2 | subj)"
+#             )
+#         )
+#       
+#       ## fit model:
+# 
+#       
+#       # fit <- brm(
+#       #   formula = f,
+#       #   data = dii,
+#       #   family = student,
+#       #   warmup = 1000, iter = 2000, chains = 4,
+#       #   control = list(adapt_delta = 0.99),
+#       #   cores = 4
+#       #   )
+#   (run_time <- Sys.time() - start_time)
+# 
+#       fit$model_name <- roi_val
+# 
+#       fit
+#         
+# }
+# stopCluster(cl)
+
+
+```
+
+# r_tr_hbm_task <- 
+#   
+#   lapply(
+# 	  
+# 	  fits[[task_val]], 
+# 	  
+# 	  function(x) {
+# 		
+# 		## means, quantiles
+# 		
+# 		sum_fit <- summary(x)
+# 		cors <- sum_fit$random$subj["cor(hilo_wave1,hilo_wave2)", c("Estimate", "l-95% CI", "u-95% CI")]
+# 		names(cors) <- c("trr", "lb95", "ub95")
+# 		
+# 		## mode
+# 		
+# 		a <- as_draws_matrix(x, variable = "cor_subj__hilo_wave1__hilo_wave2")
+# 		dens <- density(a, bw = "SJ")
+# 		map <- dens$x[dens$y == max(dens$y)]
+# 		
+# 		as.data.table(cbind(cors, map = map))
+# 		
+# 	  }
+# 	)
+
