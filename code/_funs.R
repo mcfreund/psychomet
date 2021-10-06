@@ -80,10 +80,53 @@ idi <- function(x) {
   
 }
 
+# commented 2021-10-06: filename -> filename_fun
+# read_results <- function(waves, tasks, sessions, subjs, glmname, filename, .read) {
+#   
+#   
+#   l <- enlist(mikeutils::combo_paste(waves, tasks, sessions, subjs))
+#   
+#   for (wave_i in seq_along(waves)) {
+#     
+#     name_wave_i <- waves[wave_i]
+#     
+#     for (task_i in seq_along(tasks)) {
+#       
+#       name_task_i <- tasks[task_i]
+#       
+#       for (session_i in seq_along(sessions)) {
+#         
+#         name_session_i <- sessions[session_i]
+#         
+#         for (subj_i in seq_along(subjs)) {
+#           
+#           name_subj_i <- subjs[subj_i]
+#           
+#           filename_full <- 
+#             here::here(
+#               "out", "glms", name_subj_i, "RESULTS", name_task_i, 
+#               paste0(name_session_i, "_", glmname, "_", name_wave_i),
+#               filename
+#             )
+#           
+#           nm <- paste0(name_wave_i, "_", name_task_i, "_", name_session_i, "_", name_subj_i)
+#           l[[nm]] <- .read(filename_full)
+#           
+#           
+#         }
+#         
+#       }
+#       
+#     }
+#     
+#   }
+#   
+#   l
+#   
+# }
 
-
-
-read_results <- function(waves, tasks, sessions, subjs, glmname, filename, .read) {
+# commented 2021-10-06: filename -> filename_fun
+read_results <- function(waves, tasks, sessions, subjs, glmname, filename_fun, read_fun) {
   
   
   l <- enlist(mikeutils::combo_paste(waves, tasks, sessions, subjs))
@@ -104,15 +147,20 @@ read_results <- function(waves, tasks, sessions, subjs, glmname, filename, .read
           
           name_subj_i <- subjs[subj_i]
           
+          filename <- filename_fun(
+            name_wave_i = name_wave_i, name_task_i = name_task_i, name_session_i = name_session_i, 
+            name_subj_i = name_subj_i, glmname = glmname
+          )
+          
           filename_full <- 
             here::here(
               "out", "glms", name_subj_i, "RESULTS", name_task_i, 
-              paste0(name_session_i, "_", glmname, "_", name_wave_i),
+              paste0(name_session_i, "_", glmname, "_", name_wave_i), 
               filename
               )
-          
+
           nm <- paste0(name_wave_i, "_", name_task_i, "_", name_session_i, "_", name_subj_i)
-          l[[nm]] <- .read(filename_full)
+          l[[nm]] <- read_fun(filename_full)
           
           
         }
@@ -124,6 +172,13 @@ read_results <- function(waves, tasks, sessions, subjs, glmname, filename, .read
   }
   
   l
+  
+}
+
+get_subbrick_labels <- function(fname) {
+  
+  labs <- afni("3dinfo", paste0("-label ", fname))
+  labs <- unlist(strsplit(labs, "\\|"))
   
 }
 
