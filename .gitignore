@@ -40,15 +40,15 @@ vignettes/*.pdf
 
 ## too large files
 
-/out/runwise/wb/*
-/out/runwise/figs/*
 .Rproj.user
 
 docs/
-out/icc/projs*
-out/glms/*/RESULTS/*/*/*gii
 
-
-out/test_retest/*.RDS
-
-out/glms/  ## just leave these directories on the server for now...
+#out/icc/projs*
+#out/glms/*/RESULTS/*/*/*gii
+#out/glms/  #just leave these directories on the server for now...
+#out/runwise/wb/*
+#out/runwise/figs/*
+#out/test_retest/*.RDS
+out/
+old/
