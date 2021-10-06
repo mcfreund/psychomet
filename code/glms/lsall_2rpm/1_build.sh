@@ -10,7 +10,7 @@ subjects_file=in/subjects_wave12_complete_2021-09-01.txt
 do_single_subj=false  ## for dev/debugging
 
 sessions=(baseline proactive reactive)
-tasks=(Axcpt Cuedts Stroop Stern)
+tasks=(Stroop)
 waves=(1 2)
 
 ## <<<<<< END USER INPUT >>>>>>
@@ -18,8 +18,8 @@ waves=(1 2)
 
 ## additional vars:
 
-source code/glms/null_2rpm/3dDeconvolve.sh  ## for 3dDeconvolve function
-glm_prefix="null_2rpm"  ## name of subdirectory in scripts; will be added to subdirectory name in out
+glm_prefix="lsall_2rpm"  ## name of subdirectory in scripts; will be added to subdirectory name in out
+source code/glms/${glm_prefix}/3dDeconvolve.sh  ## for 3dDeconvolve function
 hemis=(L R)
 
 if [ $do_single_subj = false ]
@@ -27,8 +27,8 @@ then
     mapfile -t subjects < $subjects_file    
 else  ## for dev
     unset subjects
-    subjects=DMCC8033964
-    subject=DMCC8033964
+    subjects=130518
+    subject=130518
     wave=1
     task_i=0
     session_i=0
@@ -53,6 +53,7 @@ for wave in ${waves[@]}; do
 
     # paths:
 
+    stimts_local=/data/nil-external/ccp/freund/psychomet/out/glms/  ## WHERE EVENT STIMTIMES ARE LOCATED
     stimts=/data/nil-bluearc/ccp-hcp/DMCC_ALL_BACKUPS/$wave_dir/fMRIPrep_AFNI_ANALYSIS/  ## JUST NEED MOVEMENT REGS
     out=/data/nil-external/ccp/freund/psychomet/out/glms/
     img=/data/nil-bluearc/ccp-hcp/DMCC_ALL_BACKUPS/$wave_dir/fMRIPrep_AFNI_ANALYSIS/
@@ -69,6 +70,7 @@ for wave in ${waves[@]}; do
                 ## define paths and names
                 sess=${sessions[$session_i]:0:3}  ## get short name
                 sess=${sess^}  ## Namecase
+                dir_stimts_local=${stimts_local}${subject}/INPUT_DATA
                 dir_stimts=${stimts}${subject}/INPUT_DATA/${tasks[$task_i]}/${sessions[$session_i]}
                 dir_out=${out}${subject}/RESULTS/${tasks[$task_i]}/${sessions[$session_i]}_${glm}
                 name_img_1=${img}${subject}/INPUT_DATA/${tasks[$task_i]}/${sessions[$session_i]}/lpi_scale_tfMRI_${tasks[$task_i]}${sess}1_AP_L.func.gii  ## either hemi OK
@@ -80,7 +82,7 @@ for wave in ${waves[@]}; do
 
                 ## build xmat
 
-                deconvolve_2rpm < /dev/null > ${dir_out}/runtime_3dDeconvolve.log 2>&1 &  ## THIS MAY NOT WORK!!! NEEDS TESTING
+                deconvolve_2rpm_lsall_stroop < /dev/null > ${dir_out}/runtime_3dDeconvolve.log 2>&1 &  ## THIS MAY NOT WORK!!! NEEDS TESTING
 
                 cd ${wd}  ## back to original dir
 

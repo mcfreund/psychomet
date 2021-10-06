@@ -538,7 +538,8 @@ for (task_i in seq_along(tasks)) {
 	  lapply(
 	    fits[[task_val]], 
 	    function(x) {
-	      x <- as_draws_matrix(x, variable = "cor_subj__hilo_wave1__hilo_wave2")
+	      # x <- as_draws_matrix(x, variable = "cor_subj__hilo_wave1__hilo_wave2")
+	      x <- as_draws_matrix(x, variable = "cor_subj__mean_wave1__mean_wave2")
 	      x <- data.table(x)
 	      x
 	      }
@@ -580,8 +581,8 @@ p_posteriors <- posterior_trr_d[roi %in% rois[core32]] %>%
 
 p_posteriors
 
-ggsave(here("out", "test_retest", "figs", "posterior_trr_core32.pdf"), p_posteriors, width = 10, height = 10)
-
+# ggsave(here("out", "test_retest", "figs", "posterior_trr_core32.pdf"), p_posteriors, width = 10, height = 10)
+ggsave(here("out", "test_retest", "figs", "posterior_trr_core32_means.pdf"), p_posteriors, width = 10, height = 10)
 
 
 
@@ -723,6 +724,78 @@ ggsave(here("out", "test_retest", "figs", "variance_ratio.pdf"), p_ratio, width 
 
 ```
 
+
+
+
+## by task
+
+```{r}
+
+fits_axcpt <- fits$Axcpt
+
+posterior_trr_axcpt <- 
+  lapply(
+    fits_axcpt, 
+    function(x) {
+      # x <- as_draws_matrix(x, variable = "cor_subj__hilo_wave1__hilo_wave2")
+      x <- as_draws_matrix(x, variable = "^cor_.*", regex = TRUE)
+      x <- data.table(x)
+      x
+      }
+    )
+
+posterior_trr_axcpt <- rbindlist(posterior_trr_axcpt, idcol = "roi")
+
+
+r_tr_axcpt <- posterior_trr_axcpt[, 
+                .(
+                  r_hilo_mean = mean(cor_subj__hilo_wave1__hilo_wave2),
+                  r_hilo_map = get_map(cor_subj__hilo_wave1__hilo_wave2),
+                  r_mean_mean = mean(cor_subj__mean_wave1__mean_wave2),
+                  r_mean_map = get_map(cor_subj__mean_wave1__mean_wave2),
+                  r_hilo_sd = sd(cor_subj__hilo_wave1__hilo_wave2),
+                  r_mean_sd = sd(cor_subj__mean_wave1__mean_wave2)
+                  ), 
+                by = "roi"
+                ]
+
+
+
+posterior_trr_axcpt_summary <- 
+  lapply(
+    fits_axcpt, 
+    function(x) {
+      r <- VarCorr(x, variable = "cor_subj__hilo_wave1__hilo_wave2")$subj$cor
+      r_mean <- r["mean_wave1", , "mean_wave2"]
+      r_hilo <- r["hilo_wave1", , "hilo_wave2"]
+      r_summary <- as.data.table(rbind(mean = r_mean, hilo = r_hilo), keep.rownames = "variable")
+      r_summary
+    }
+    )
+
+
+posterior_trr_axcpt_summary <- rbindlist(posterior_trr_axcpt_summary, idcol = "roi")
+
+
+posterior_trr_axcpt_summary %>%
+  ggplot(aes(variable, Estimate)) +
+  # ggplot(aes(variable, Est.Error)) +
+  geom_boxplot(width = 0.1, fill = "grey40")
+
+posterior_trr_axcpt_summary %>%
+  filter(Q2.5 > 0, variable == "mean")
+
+r_sum %>% filter(roi == " LH_Cont_PFCv_1", task == "Axcpt")
+
+
+plot(fits_axcpt$RH_Default_PFCv_4, variable = "cor_.*", regex = TRUE)
+posterior_trr_axcpt_summary %>% filter(roi == "RH_Default_PFCv_4")
+r_tr_axcpt %>% filter(roi == "RH_Default_PFCv_4")
+
+
+
+
+```
 
 
 

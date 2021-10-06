@@ -253,6 +253,8 @@ fit_chen5 <- update(
   cores = 4
   )
 
+fit_chen5
+
 fit_chen10 <- update(
   fit_chen, 
   y10 ~ hilo * wave + 
@@ -261,6 +263,8 @@ fit_chen10 <- update(
   newdata = data,
   cores = 4
   )
+
+fit_chen10
   
 ```
 
@@ -287,9 +291,10 @@ res <- melt(
   )
 
 res %>%
-  ggplot(aes(r, fill = residual_sd)) +
+  ggplot(aes(r, fill = residual_sd, color = residual_sd)) +
   geom_density(alpha = 0.5, size = 2) +
   scale_fill_viridis_d() +
+  scale_color_viridis_d() +
   labs(x = "cor(hilo_wave1, hilo_wave2)")
 
 ```

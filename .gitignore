@@ -50,3 +50,5 @@ out/glms/*/RESULTS/*/*/*gii
 
 
 out/test_retest/*.RDS
+
+out/glms*  ## just leave these directories on the server for now...
