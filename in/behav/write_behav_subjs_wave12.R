@@ -62,7 +62,7 @@ behav$Stern$resp <- ifelse(behav$Stern$resp == 1, 2, ifelse(behav$Stern$resp == 
 behav$Stern$cresp <- ifelse(behav$Stern$cresp == 1, 2, ifelse(behav$Stern$cresp == 2, 1, NA))
 
 behav$Stern$trialtype <- paste0(ifelse(behav$Stern$load == 5, "LL5", "not5"), behav$Stern$trial.type)
-
+behav$Stern$trialtype_alt <- paste0(behav$Stern$trial.type, "_", behav$Stern$load)
 
 ## Stroop:
 
@@ -93,31 +93,39 @@ behav$Stroop <- behav$Stroop %>% rename(cresp = correctcolor)
 
 
 cols <- c("subj", "wave", "session", "run", "trial.num",  "trialtype", "cresp", "resp", "acc", "rt")
-behav <- lapply(behav, function(x) x[, ..cols])
+b <- lapply(behav, function(x) x[, ..cols])
 
-behav <- rbindlist(behav, idcol = "task")
+b <- rbindlist(b, idcol = "task")
 
 
 ## format vals:
 
-behav[session == "bas"]$session <- "baseline"
-behav[session == "pro"]$session <- "proactive"
-behav[session == "rea"]$session <- "reactive"
+b[session == "bas"]$session <- "baseline"
+b[session == "pro"]$session <- "proactive"
+b[session == "rea"]$session <- "reactive"
 
-behav <- behav[order(task, subj, wave, session, run, trial.num)]
-behav[, trialnum := 1:.N, by = c("task", "subj", "wave", "session")]  ## not over run
-behav[, c("run", "trial.num") := NULL]
+b <- b[order(task, subj, wave, session, run, trial.num)]
+b[, trialnum := 1:.N, by = c("task", "subj", "wave", "session")]  ## not over run
+b[, c("run", "trial.num") := NULL]
 
-behav[, wave := paste0("wave", wave)]
+b[, wave := paste0("wave", wave)]
 
 
 ## make hilo column:
 
-behav$hilo <- ifelse(behav$trialtype %in% hi, "hi", ifelse(behav$trialtype %in% lo, "lo", NA))
+b$hilo <- ifelse(b$trialtype %in% hi, "hi", ifelse(b$trialtype %in% lo, "lo", NA))
 
-behav$hilo_all <- NA
-behav$hilo_all[grepl("^BX$|^InCon|RN$|InCon$", behav$trialtype)] <- "hi"
-behav$hilo_all[grepl("^BY$|^Con|NN$|biasCon|PC50Con$", behav$trialtype)] <- "lo"
+
+hi_all <- list(Axcpt = c("BX", "AY"), Cuedts = c("InConInc", "InConNoInc"), Stroop = c("biasInCon", "PC50InCon"))
+lo_all <- list(Axcpt = c("AX", "BY"), Cuedts = c("ConInc", "ConNoInc"), Stroop = c("biasCon", "PC50Con"))
+b$hilo_all <- as.character(NA)
+b[trialtype %in% unlist(hi_all)]$hilo_all <- "hi"
+b[trialtype %in% unlist(lo_all)]$hilo_all <- "lo"
+b[task == "Stern"]$hilo_all <- as.character(behav$Stern$load)
+
+
+# b$hilo_all[grepl("^BX$|^InCon|RN$|InCon$", b$trialtype)] <- "hi"
+# b$hilo_all[grepl("^BY$|^Con|NN$|biasCon|PC50Con$", b$trialtype)] <- "lo"
 
 # table(behav$hilo, behav$trialtype)
 # table(behav$hilo_all, behav$trialtype)
@@ -126,5 +134,5 @@ behav$hilo_all[grepl("^BY$|^Con|NN$|biasCon|PC50Con$", behav$trialtype)] <- "lo"
 ## write:
 
 # map2(behav, here("in", "behav", paste0("behavior-and-events_wave12_", tasks, ".csv")), fwrite)
-fwrite(behav, here("in", "behav", paste0("behavior-and-events_wave12_alltasks.csv")))
+fwrite(b, here("in", "behav", paste0("behavior-and-events_wave12_alltasks.csv")))
 # table(behav$hilo_all, behav$trialtype, behav$task)

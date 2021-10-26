@@ -95,7 +95,7 @@ for (el_i in seq_along(res)) {
   res_i <- res[[el_i]]
   
   
-  means[[el_i]] <- vapply(
+  means_i <- vapply(
     
     seq_along(rois),
     
@@ -111,6 +111,10 @@ for (el_i in seq_along(res)) {
     
   )
   
+  dimnames(means_i) <- list(trial = paste0("trial", 1:nrow(means_i)), roi = rois)
+  means_i <- as.data.table(means_i)
+  
+  means[[el_i]] <- means_i
   
   
 }

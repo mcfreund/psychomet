@@ -1,0 +1,217 @@
+---
+title: "icc_multivariate_projections"
+author: "mike freund"
+date: "10/19/2021"
+output: html_document
+---
+  
+```{r setup, include = FALSE}
+
+library(knitr)
+library(here)
+library(data.table)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(ggridges)
+library(mikeutils)
+
+source(here("code", "_funs.R"))
+
+opts_chunk$set(echo = TRUE)
+
+theme_set(theme_minimal(base_size = 14))
+
+```
+
+
+# parcel level
+
+```{r}
+
+fname_parcel <- c(
+  task = "stroop_projections_rda_lambda-1000_cross-task_schaefer-400parcel-variates.RDS",
+  session = "stroop_projections_rda_lambda-100_cross-session_schaefer-400parcel-variates.RDS"
+)
+
+## view ----
+
+for (fname in fname_parcel) {
+  
+  dat_parcel <- readRDS(here("out", "test_retest", fname))
+  
+  dat_parcel <- dat_parcel %>%
+    group_by(wave, subj, variable, hilo) %>%
+    mutate(
+      class_true = sign((hilo == "hi")-0.5),
+      class_pred = sign(p),
+      was_classified =  (class_true*class_pred) > 0,
+      is_farout = farout(p),
+      network = get_network(variable)
+    )
+  
+  
+  p_class <- dat_parcel %>%
+    
+    group_by(subj, variable, network) %>%
+    summarize(acc = mean(was_classified)) %>%
+    
+    ggplot(aes(variable, acc)) +
+    stat_summary(fun.data = "mean_cl_boot") +
+    
+    facet_wrap(vars(network), scales = "free_x")
+  
+  print(p_class)
+  
+  
+  sum_parcel <- dat_parcel %>%
+    
+    filter(!is_farout) %>%
+    group_by(wave, subj, variable, network, hilo) %>%
+    summarize(p_bar = mean(p)) %>%
+    
+    pivot_wider(names_from = "hilo", values_from = "p_bar") %>%
+    mutate(hilo = hi - lo)
+  
+  
+  p_contr <- sum_parcel %>%
+    
+    ggplot(aes(variable, hilo)) +
+    stat_summary(fun.data = "mean_cl_boot") +
+    
+    facet_wrap(vars(network), scales = "free_x")
+  
+  print(p_contr)
+  
+  
+  p_contr_ridges <- sum_parcel %>%
+    
+    ggplot(aes(hilo, get_network(variable))) +
+    geom_density_ridges()
+  
+  print(p_contr_ridges)
+  
+  
+  
+  p_ridges <- sum_parcel %>%
+    
+    pivot_wider(id_cols = c(subj, variable), names_from = "wave", values_from = "hilo") %>%
+    group_by(variable) %>%
+    summarize(r = cor(wave1, wave2)) %>%
+  
+    ggplot(aes(r, get_network(variable))) +
+    geom_density_ridges()
+  
+  print(p_ridges)
+  
+  
+  sum_parcel %>%
+    
+    pivot_wider(id_cols = c(subj, variable), names_from = "wave", values_from = "hilo") %>%
+    group_by(variable) %>%
+    summarize(r = cor(wave1, wave2)) %>%
+    arrange(-r) %>%
+    filter(r > 0.4) %>% as.data.frame %>% print
+  
+}
+
+```
+
+
+## network level
+
+```{r}
+
+fname_network <- c(
+  task = "stroop_projections_rda_lambda-1000_cross-task_schaefer-7network-variates.RDS",
+  session = "stroop_projections_rda_lambda-100_cross-session_schaefer-7network-variates.RDS"
+)
+
+for (fname in fname_network) {
+
+  dat_network <- readRDS(here("out", "test_retest", fname))
+
+  dat_network <- dat_network %>%
+    group_by(wave, subj, variable, hilo) %>%
+    mutate(
+      class_true = sign((hilo == "hi")-0.5),
+      class_pred = sign(p),
+      was_classified =  (class_true*class_pred) > 0,
+      is_farout = farout(p),
+      network = get_network(variable)
+    )
+  
+  
+  p_class_net <- dat_network %>%
+    
+    group_by(subj, variable) %>%
+    summarize(acc = mean(was_classified)) %>%
+    
+    ggplot(aes(variable, acc, color = subj)) +
+    
+    geom_point(shape = 16, size = 1) +
+    geom_line(aes(group = subj), size = 1) +
+    
+    scale_color_viridis_d()
+  
+  print(p_class_net)
+  
+  
+  # dat_network %>%
+  #   
+  #   filter(!is_farout) %>%
+  #   group_by(wave, subj, variable, hilo) %>%
+  #   summarize(p_bar = mean(p)) %>%
+  #   
+  #   ggplot(aes(variable, p_bar, color = hilo)) +
+  #   geom_point(shape = 16, size = 3, position = position_jitterdodge()) +
+  #   scale_color_viridis_d()
+  
+  sum_network <- dat_network %>%
+    
+    filter(!is_farout) %>%
+    group_by(wave, subj, variable, hilo) %>%
+    summarize(p_bar = mean(p)) %>%
+    
+    pivot_wider(names_from = "hilo", values_from = "p_bar") %>%
+    mutate(hilo = hi - lo)
+  
+  
+  p_contr_net <- sum_network %>%
+    
+    ggplot(aes(variable, hilo)) +
+    stat_summary(fun.data = "mean_cl_boot")
+  
+  print(p_contr_net)
+  
+  
+  p_corr_net <- sum_network %>%
+    
+    pivot_wider(id_cols = c(subj, variable), names_from = "wave", values_from = "hilo") %>%
+    
+    ggplot(aes(wave1, wave2)) +
+    
+    geom_point() +
+    facet_wrap(vars(variable)) +
+    geom_abline()
+  
+  print(p_corr_net)
+  
+  
+  sum_network %>%
+    
+    pivot_wider(id_cols = c(subj, variable), names_from = "wave", values_from = "hilo") %>%
+    
+    group_by(variable) %>%
+    summarize(r = cor(wave1, wave2)) %>%
+    arrange(-r) %>%
+    as.data.frame %>% print
+
+  
+}
+
+
+
+
+```
+
