@@ -1,5 +1,6 @@
 
 library(colorout)
+library(httpgd)
 library(here)
 library(reticulate)
 library(tidyr)
@@ -19,6 +20,7 @@ library(viridis)
 library(purrr)
 
 theme_set(theme_half_open())
+hgd()
 
 source(here("code", "_constants.R"))
 source(here("code", "_atlases.R"))
