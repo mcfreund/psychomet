@@ -1,4 +1,5 @@
 library(colorout)
+library(httpgd)
 library(here)
 library(reticulate)
 library(tidyr)
@@ -18,6 +19,8 @@ library(viridis)
 library(purrr)
 
 theme_set(theme_half_open())
+hgd()
+
 
 source(here("code", "_constants.R"))
 source(here("code", "_atlases.R"))
@@ -62,13 +65,13 @@ fn <- here("out", "icc", "trial-level-recovery_hilo_core32_wave12.csv")
 
 if (file.exists(fn)) {
   
-  d <- fread(here("out", "icc", "trial-level-recovery_hilo_core32_wave12.csv"))
+  d <- fread(fn)
   
 } else {
   
   # wave_i = 2
-  # task_i = 3
-  # session_i = 2
+  # task_i = 4
+  # session_i = 3
   # task_val <- tasks[task_i]
   # wave_val <- waves[wave_i]
   # session_val <- sessions[session_i]
@@ -92,8 +95,9 @@ if (file.exists(fn)) {
         
         resid <- read_results(
           wave_val, task_val, session_val, subjs,
-          glmname = "null_2rpm", filename = "errts_trials_target_epoch.RDS",
-          readRDS
+          glmname = "null_2rpm", 
+          filename_fun = function(...) "errts_trials_target_epoch.RDS",
+          read_fun = readRDS
         )
         names(resid) <- gsub(paste0(wave_val, "_", task_val, "_", session_val, "_"), "", names(resid))
         
@@ -193,15 +197,19 @@ p_cor_box <- d %>%
   labs(y = "linear correlation") +
   theme(strip.background = element_blank())
 
-ggsave(here("out", "icc", "figs", "recovery_box_cor_hilo_core32.pdf"), p_cor_box, dev = "pdf", width = 7, height = 4)
+p_cor_box
+ggsave(here("out", "test_retest", "figs", "recovery_box_cor_hilo_core32.pdf"), p_cor_box, dev = "pdf", width = 7, height = 4)
+
 
 
 p_cor_box_subj <- d %>%
   ggplot(aes(r, subj)) +
   geom_boxplot(width = 0.2, fill = "grey40")
 
+p_cor_box_subj
+
 ggsave(
-  here("out", "icc", "figs", "recovery_box_subj_cor_hilo_core32.pdf"), 
+  here("out", "test_retest", "figs", "recovery_box_subj_cor_hilo_core32.pdf"), 
   p_cor_box_subj, 
   dev = "pdf", width = 4.5, height = 5
   )

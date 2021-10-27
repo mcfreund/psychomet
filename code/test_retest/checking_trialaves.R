@@ -36,8 +36,9 @@ subjs <- subjs_wave12
 
 d <- read_results(
   c("wave1", "wave2"), tasks, "baseline", subjs,
-  glmname = "null_2rpm", filename = "means-trials_schaefer-parcel400_resid-errts.csv",
-  fread
+  glmname = "null_2rpm", 
+  filename_fun = function(...) "means-trials_schaefer-parcel400_resid-errts.csv",
+  read_fun = fread
 )
 d <- rbindlist(d, idcol = "id")
 d <- d[, trialnum := 1:.N, by = "id"]  ## make trial number column
